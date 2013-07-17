@@ -35,9 +35,110 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 // *********************************************************
 
 (function(global){
-	function init() { }
+
+	function doLogin() {
+		$.ajax({
+			url: SERVER + "/login",
+			type: "POST",
+			contentType: "application/json",
+			dataType: "json",
+			cache: false,
+			data: JSON.stringify({
+				first_name: $("#first_name").val(),
+				email: $("#email").val()
+			}),
+			success: loginSuccess,
+			error: function() {
+				alert("Error logging in. Try again!");
+			}
+		});
+	}
+
+	function loginSuccess(resp) {
+		user_id = resp.user_id;
+		first_name = resp.first_name;
+		email = resp.email;
+
+		// save login info to sessionStorage, if possible
+		if (session_storage_available) {
+			app_session.save({
+				user_id: user_id,
+				first_name: first_name,
+				email: email
+			});
+		}
+
+		loggedIn();
+	}
+
+	function loggedIn() {
+		$("#loginentry").hide();
+		$("#content").show();
+	}
+
+	function doLogout() {
+		user_id = first_name = email = null;
+
+		// discard sessionStorage data, if any
+		if (session_storage_available) {
+			app_session.discard(["user_id","first_name","email"]);
+		}
+		
+		loggedOut();
+	}
+
+	function loggedOut() {
+		$("#loginentry").show();
+		$("#content").hide();
+	}
+
+	function init() {
+		$(document).ready(function(){
+			$("#login").click(doLogin);
+			$("#logout").click(doLogout);
+
+			if (user_id) {
+				loggedIn();
+			}
+			else {
+				loggedOut();
+			}
+		});
+	}
+
+	var user_id,
+		first_name,
+		email,
+
+		app_session,
+
+		// feature test for sessionStorage
+		session_storage_available = (function(test) {
+			try {
+				sessionStorage.setItem(test, test);
+				sessionStorage.removeItem(test);
+				return true;
+			}
+			catch (err) {
+				return false;
+			}
+		})("unnamed"),
+
+		SERVER = "http://localhost:8005"
+	;
+
+	// do we have sessionStorage available?
+	if (session_storage_available) {
+		app_session = h5.storage({ expires: "session" });
+
+		// pull login session info from sessionStorage
+		user_id = app_session.get("user_id");
+		first_name = app_session.get("first_name");
+		email = app_session.get("email");
+	}
 
 	global.unnamed = {
 		init: init
 	};
+
 })(window);

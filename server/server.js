@@ -61,10 +61,10 @@ function handleHTTP(req, res) {
 	}
 	// POST routes?
 	else if (req.method == "POST") {
-		if (req.url.match(/^\/something-else\b/)) {
+		if (req.url.match(/^\/login\b/)) {
 			req.on("data",function(d){ reqData += d; });
 			req.on("end",function(){
-				somethingElse(reqData,req,res);
+				login(JSON.parse(reqData),req,res);
 			});
 		}
 		else {
@@ -81,6 +81,45 @@ function handleHTTP(req, res) {
 	return false;
 }
 
+function generateID(store) {
+	var id;
+	do {
+		id = Math.round(Math.random()*1E9);
+	} while (id in store);
+	store[id] = true;
+	return id;
+}
+
+function login(reqData,oreq,ores) {
+	var uid, user_id;
+
+	for (uid in users) {
+		if (
+			reqData.first_name.toLowerCase() === users[uid].first_name &&
+			reqData.email.toLowerCase() === users[uid].email
+		) {
+			user_id = uid;
+			break;
+		}
+	}
+
+	if (!user_id) {
+		user_id = generateID(users);
+		users[user_id] = {
+			first_name: reqData.first_name.toLowerCase(),
+			email: reqData.email.toLowerCase()
+		};
+	}
+
+	ores.setHeader("Content-Type","application/json; charset=UTF-8");
+	ores.writeHead(200,CORS_POST_HEADERS);
+	ores.end(JSON.stringify({
+		user_id: user_id,
+		first_name: users[user_id].first_name,
+		email: users[user_id].email
+	}));
+}
+
 function something(oreq,ores) {
 	ores.writeHead(200,{
 		"Content-type": "text/plain"
@@ -88,14 +127,10 @@ function something(oreq,ores) {
 	ores.end("Hello World");
 }
 
-function somethingElse(reqData,oreq,ores) {
-	ores.writeHead(200,{
-		"Content-type": "text/plain"
-	});
-	ores.end(reqData);
-}
 
 
+
+// *********************************************************
 
 var global = this,
 
@@ -119,7 +154,9 @@ var global = this,
 	CORS_GET_HEADERS = secret.CORS_GET_HEADERS,
 	CORS_POST_HEADERS = secret.CORS_POST_HEADERS,
 
-	UNNAMED_SITE = "http://test.getify.com/unnamed"
+	UNNAMED_SITE = "http://localhost:8080",
+
+	users = { }
 ;
 
 
