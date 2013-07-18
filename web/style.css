@@ -1,8 +1,10 @@
-body { margin:0px; padding:0px; }
+html, body { margin:0px; padding:0px; height:100%; }
 
-#loginentry { display:none; }
+#loginentry { display:none; position:relative; overflow:auto; height:100%;
+	-moz-box-sizing:border-box; box-sizing:border-box;
+}
 
-#content { display:none; position:relative;
+#content { display:none; position:relative; overflow:auto; height:100%;
 	-moz-box-sizing:border-box; box-sizing:border-box;
 }
 
