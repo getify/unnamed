@@ -6,15 +6,20 @@ html, body { margin:0px; padding:0px; height:100%; }
 
 #loginentry { display:none; }
 
-#logout { position:absolute; top:5px; right:5px; }
+#whome { display:none; position:absolute; top:5px; right:5px; white-space:nowrap; }
+	#whome #myimg { display:none; border:0px; vertical-align:middle; height:22px; }
+	#whome #myname { font-weight:bold; line-height:22px; padding-left:8px; padding-right:8px; }
 
-#leaderboard { position:absolute; top:30px; right:5px; width:150px; height:200px; padding:0px 5px 5px 5px; overflow:scroll; border:1px solid #666; background-color:#fff; z-index:1;
+#leaderboard { display:none; position:absolute; top:35px; right:5px; width:150px; height:200px; padding:0px 5px 5px 5px; overflow:scroll; border:1px solid #666; background-color:#fff; z-index:1;
 	-moz-box-sizing:border-box; box-sizing:border-box;
 }
 	#leaderboard h2 { font-size:17px; text-align:center; text-decoration:underline; margin-top:5px; }
 
-#captureme { display:none; position:absolute; width:600px; height:600px; border:5px solid rgba(150,150,150,0.6); border-radius:10px; background-color:#fff; z-index:1000;
+#captureme { display:none; position:absolute; width:550px; height:420px; left:50%; top:50%; border:5px solid rgba(150,150,150,0.6); border-radius:10px; background-color:#fff; z-index:1000;
+	-ms-transform:translate(-275px,-210px); -webkit-transform:translate(-275px,-210px); transform:translate(-275px,-210px);
 	-moz-box-sizing:border-box; box-sizing:border-box;
 }
+	#captureme video { display:table; margin:0px auto; z-index:1; }
+	#captureme #btncontainer { position:absolute; left:0px; top:5px; width:100%; text-align:center; z-index:10; }
 
 #game { display:none; position:relative; z-index:2; }

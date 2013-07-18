@@ -1,5 +1,9 @@
 (function(global,unnamed){
 
-	window.unnamed.game = {};
+	function start(){}
+
+	window.unnamed.game = {
+		start: start
+	};
 
 })(window,window.unnamed);
