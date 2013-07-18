@@ -107,8 +107,14 @@ function login(reqData,oreq,ores) {
 		user_id = generateID(users);
 		users[user_id] = {
 			first_name: reqData.first_name.toLowerCase(),
-			email: reqData.email.toLowerCase()
+			email: reqData.email.toLowerCase(),
+			score: 0,
+			timestamp: Date.now()
 		};
+	}
+	else {
+		// update the user's login timestamp
+		users[user_id].timestamp = Date.now();
 	}
 
 	ores.setHeader("Content-Type","application/json; charset=UTF-8");
@@ -116,7 +122,8 @@ function login(reqData,oreq,ores) {
 	ores.end(JSON.stringify({
 		user_id: user_id,
 		first_name: users[user_id].first_name,
-		email: users[user_id].email
+		email: users[user_id].email,
+		score: users[user_id].score
 	}));
 }
 
@@ -139,6 +146,9 @@ var global = this,
 	url_parser = require("url"),
 
 	httpserv = http.createServer(handleHTTP),
+	io = require("socket.io").listen(httpserv),
+
+	Leaderboard = require("./leaderboard.js"),
 
 	ASQ = asyncHelpers.ASQ,
 
@@ -159,6 +169,22 @@ var global = this,
 	users = { }
 ;
 
+// configure socket.io
+io.configure(function(){
+	io.enable("browser client minification"); // send minified client
+	io.enable("browser client etag"); // apply etag caching logic based on version number
+	io.set("log level", 1); // reduce logging
+	io.set("transports", [
+		"websocket"
+		, "flashsocket"
+		, "htmlfile"
+		, "xhr-polling"
+		, "jsonp-polling"
+	]);
+});
 
 // spin up the HTTP server
 httpserv.listen(INTERNAL_SERVER_PORT, INTERNAL_SERVER_ADDR);
+
+// init the Leaderboard socket
+Leaderboard.init(io,users);

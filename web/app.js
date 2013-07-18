@@ -36,6 +36,18 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 
 (function(global){
 
+	function updateLeaderboard(leaderboard) {
+		var html = "";
+
+		leaderboard.forEach(function(leader){
+			html += "<li><span class=\"leader\">" + leader.name + "</span>" +
+				"<span class=\"score\">" + leader.score + "</span></li>"
+			;
+		});
+
+		$leaderboard_list.html(html);
+	}
+
 	function cancelVideoCapture() {
 		$captureme.hide();
 
@@ -187,6 +199,13 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 		else {
 			captureMe();
 		}
+
+		leaderboard_socket = io.connect(SERVER + "/leaderboard");
+		leaderboard_socket.on("invalid_user",invalidUser);
+		leaderboard_socket.on("update",updateLeaderboard);
+
+		// register ourself with the leaderboard to receive updates
+		leaderboard_socket.emit("user",user_id);
 	}
 
 	function doLogout() {
@@ -198,6 +217,11 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 		}
 
 		cancelVideoCapture();
+
+		leaderboard_socket.removeListener("invalid_user",invalidUser);
+		leaderboard_socket.removeListener("update",updateLeaderboard);
+		// TODO: disconnect socket
+		leaderboard_socket = null;
 		
 		loggedOut();
 	}
@@ -209,10 +233,15 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 		$("#whome #myname").empty().hide();
 	}
 
+	function invalidUser() {
+		alert("Leaderboard connection failed. Refresh and try again.");
+	}
+
 	function init() {
 		$(document).ready(function(){
 			$captureme = $("#captureme");
 			$myimg = $("#whome #myimg");
+			$leaderboard_list = $("#leaderboard ul");
 
 			$("#login").click(doLogin);
 			$("#logout").click(doLogout);
@@ -235,11 +264,13 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 		$captureme,
 		$myimg,
 		$video,
+		$leaderboard_list,
 
 		media_stream,
 		thumbnail_canvas,
 		capture_thumbnail_drawing,
 		app_session,
+		leaderboard_socket,
 
 		// feature test for sessionStorage
 		session_storage_available = (function(test) {

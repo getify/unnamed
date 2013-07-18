@@ -10,6 +10,7 @@
 // *********************************************************
 
 $LAB
+.script("http://localhost:8005/socket.io/socket.io.js")
 .script("https://ajax.googleapis.com/ajax/libs/jquery/1.8.1/jquery.min.js").wait()
 .script("app.js").wait()
 .script("game.js")
