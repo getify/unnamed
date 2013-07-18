@@ -11,7 +11,8 @@
 
 $LAB
 .script("https://ajax.googleapis.com/ajax/libs/jquery/1.8.1/jquery.min.js").wait()
-.script("app.js")
+.script("app.js").wait()
+.script("game.js")
 .wait(function(){
 	unnamed.init();
 });
