@@ -73,7 +73,7 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 
 	function loggedIn() {
 		$("#loginentry").hide();
-		$("#content").show();
+		$("#logout, #leaderboard").show();
 	}
 
 	function doLogout() {
@@ -89,7 +89,7 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 
 	function loggedOut() {
 		$("#loginentry").show();
-		$("#content").hide();
+		$("#logout, #captureme, #game, #leaderboard").hide();
 	}
 
 	function init() {

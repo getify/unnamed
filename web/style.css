@@ -1,19 +1,17 @@
 html, body { margin:0px; padding:0px; height:100%; }
 
-#loginentry { display:none; position:relative; overflow:auto; height:100%;
+#content { position:relative; overflow:auto; height:100%;
 	-moz-box-sizing:border-box; box-sizing:border-box;
 }
 
-#content { display:none; position:relative; overflow:auto; height:100%;
-	-moz-box-sizing:border-box; box-sizing:border-box;
-}
+#loginentry { display:none; }
 
 #logout { position:absolute; top:5px; right:5px; }
 
-#leaderboard { position:absolute; top:30px; right:5px; width:150px; height:200px; padding:5px; overflow:scroll; border:1px solid #666; background-color:#fff; z-index:1;
+#leaderboard { position:absolute; top:30px; right:5px; width:150px; height:200px; padding:0px 5px 5px 5px; overflow:scroll; border:1px solid #666; background-color:#fff; z-index:1;
 	-moz-box-sizing:border-box; box-sizing:border-box;
 }
-	#leaderboard h2 { font-size:17px; text-align:center; }
+	#leaderboard h2 { font-size:17px; text-align:center; text-decoration:underline; margin-top:5px; }
 
 #captureme { display:none; position:absolute; width:600px; height:600px; border:5px solid rgba(150,150,150,0.6); border-radius:10px; background-color:#fff; z-index:1000;
 	-moz-box-sizing:border-box; box-sizing:border-box;
