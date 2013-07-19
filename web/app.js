@@ -34,14 +34,40 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 
 // *********************************************************
 
-(function(global){
+(function(global,unnamed){
+
+	function killSocket() {
+		leaderboard_socket.removeListener("connect_failed",userDisconnected);
+		leaderboard_socket.removeListener("disconnect",userDisconnected);
+		leaderboard_socket.removeListener("invalid_user",invalidUser);
+		leaderboard_socket.removeListener("update",updateLeaderboard);
+	}
+
+	// kill socket namespace cache so we can reconnect to it later
+	function killSocketNamespace() {
+		// NOTE: this is a hack, the socket.io API seems to misbehave without it
+		delete io.sockets[unnamed.SERVER]["namespaces"]["/leaderboard"];
+	}
 
 	function userDisconnected() {
-		alert("Socket disconnected. Please refresh.");
+		cancelVideoCapture();
+
+		$("#whome, #areyouready, #game, #leaderboard").hide();
+		$leaderboard_list.empty();	
+		if (leaderboard_socket) {
+			killSocket();
+			leaderboard_socket = null;
+			killSocketNamespace();
+		}
+
+		unnamed.game.abort();
+
+		alert("Lost connection to server. Please refresh.");
 	}
 
 	function invalidUser() {
-		console.log("Leaderboard connection authorization failed.");
+		doLogout();
+		alert("Leaderboard user authorization failed. You've been logged out, so login to try again.");
 	}
 
 	function updateLeaderboard(leaderboard) {
@@ -70,7 +96,10 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 			media_stream = null;
 		}
 
-		h5.animationFrame.cancel(capture_thumbnail_drawing);
+		if (capture_thumbnail_drawing) {
+			h5.animationFrame.cancel(capture_thumbnail_drawing);
+		}
+		capture_thumbnail_drawing = null;
 	}
 
 	function doCapture() {
@@ -103,7 +132,9 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 
 		cancelVideoCapture();
 
-		unnamed.game.start(mypic);
+		if (leaderboard_socket) {
+			unnamed.game.start(user_id,mypic);
+		}
 	}
 
 	function doThumbnailCapture() {
@@ -156,13 +187,15 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 			doThumbnailCapture();
 		})
 		.failed(function(){
+			$captureme.hide();
+
 			alert("Access to the media failed.");
 		});
 	}
 
 	function doLogin() {
 		$.ajax({
-			url: SERVER + "/login",
+			url: unnamed.SERVER + "/login",
 			type: "POST",
 			contentType: "application/json",
 			dataType: "json",
@@ -200,23 +233,24 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 		$("#whome, #leaderboard").show();
 		$("#whome #myname").text(first_name).show();
 
+		leaderboard_socket = io.connect(unnamed.SERVER + "/leaderboard",unnamed.SOCKET_IO_CONNECT_OPTS);
+		leaderboard_socket.once("connect_failed",userDisconnected);
+		leaderboard_socket.once("disconnect",userDisconnected);
+		leaderboard_socket.once("invalid_user",invalidUser);
+		leaderboard_socket.on("update",updateLeaderboard);
+
+		// register ourself with the leaderboard to receive updates
+		leaderboard_socket.emit("user",user_id);
+
 		// do we already have our own pic captured?
 		if (mypic) {
 			$myimg.attr({src:mypic}).show();
-			unnamed.game.start(mypic);
+			unnamed.game.start(user_id,mypic);
 		}
 		// otherwise, let's capture it!
 		else {
 			captureMe();
 		}
-
-		leaderboard_socket = io.connect(SERVER + "/leaderboard");
-		leaderboard_socket.once("invalid_user",invalidUser);
-		leaderboard_socket.on("update",updateLeaderboard);
-		leaderboard_socket.once("disconnect",userDisconnected);
-
-		// register ourself with the leaderboard to receive updates
-		leaderboard_socket.emit("user",user_id);
 	}
 
 	function doLogout() {
@@ -229,11 +263,14 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 
 		cancelVideoCapture();
 
-		leaderboard_socket.removeListener("invalid_user",invalidUser);
-		leaderboard_socket.removeListener("update",updateLeaderboard);
-		leaderboard_socket.removeListener("disconnect",userDisconnected);
-		leaderboard_socket.disconnect();
-		leaderboard_socket = null;
+		if (leaderboard_socket) {
+			killSocket();
+			leaderboard_socket.disconnect();
+			leaderboard_socket = null;
+			killSocketNamespace();
+		}
+
+		unnamed.game.abort();
 		
 		loggedOut();
 	}
@@ -241,6 +278,7 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 	function loggedOut() {
 		$("#loginentry").show();
 		$("#whome, #captureme, #areyouready, #game, #leaderboard").hide();
+		$leaderboard_list.empty();	
 		$myimg.attr({src:""}).hide();
 		$("#whome #myname").empty().hide();
 	}
@@ -250,10 +288,13 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 			$captureme = $("#captureme");
 			$myimg = $("#whome #myimg");
 			$leaderboard_list = $("#leaderboard ul");
+			$leaderboard_list.empty();	
 
 			$("#login").click(doLogin);
 			$("#logout").click(doLogout);
 			$captureme.find("#btn").click(doCapture);
+
+			unnamed.game.init();
 
 			if (user_id) {
 				loggedIn();
@@ -290,9 +331,7 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 			catch (err) {
 				return false;
 			}
-		})("unnamed"),
-
-		SERVER = "http://localhost:8005"
+		})("unnamed")
 	;
 
 	// do we have sessionStorage available?
@@ -306,8 +345,14 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 		mypic = app_session.get("mypic");
 	}
 
-	global.unnamed = {
-		init: init
+	unnamed = global.unnamed = {
+		init: init,
+
+		SERVER: "http://localhost:8005",
+		SOCKET_IO_CONNECT_OPTS: {
+			"connect timeout": 3000,
+			"reconnect": false
+		}
 	};
 
 })(window);

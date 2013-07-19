@@ -139,6 +139,7 @@ var global = this,
 	io = require("socket.io").listen(httpserv),
 
 	Leaderboard = require("./leaderboard.js"),
+	Game = require("./game.js"),
 
 	ASQ = require("asynquence"),
 
@@ -176,5 +177,8 @@ io.configure(function(){
 // spin up the HTTP server
 httpserv.listen(INTERNAL_SERVER_PORT, INTERNAL_SERVER_ADDR);
 
-// init the Leaderboard socket
+// init the Leaderboard/socket
 Leaderboard.init(io,users);
+
+// init the Game/socket
+Game.init(io,users);

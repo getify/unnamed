@@ -31,6 +31,6 @@ html, body { margin:0px; padding:0px; height:100%; }
 	-ms-transform:translate(-150px,-50px); -webkit-transform:translate(-150px,-50px); transform:translate(-150px,-50px);
 	-moz-box-sizing:border-box; box-sizing:border-box;
 }
-	#areyouready input { display:block; border:3px outset #aaa; border-radius:5px; font-size:25px; margin:21px auto; padding:8px 18px; }
+	#areyouready input[type='button'] { display:block; border:3px outset #aaa; border-radius:5px; font-size:25px; margin:21px auto; padding:8px 18px; }
 
 #game { display:none; position:relative; z-index:2; }

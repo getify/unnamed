@@ -35,9 +35,9 @@ function update(userID,score) {
 function connection(socket) {
 
 	function user(userID) {
-		if (user_list[userID]) {
+		if (user_list[userID] && !user_list[userID].connected) {
 			user_id = userID;
-			user_list[user_id].socket = socket;
+			user_list[user_id].connected = true;
 			io.of("/leaderboard").emit("update",getLeaderboard());
 		}
 		else {
@@ -46,16 +46,27 @@ function connection(socket) {
 		}
 	}
 
+	function killSocket() {
+		socket.removeListener("user",user);
+		socket.removeListener("disconnect",disconnected);
+	}
+
 	function disconnected() {
 		if (user_id && user_list[user_id]) {
-			user_list[user_id].socket = null;
+			user_list[user_id].connected = false;
+			if (socket) {
+				killSocket();
+				socket = null;
+			}
 		}
 	}
 
 	function doDisconnect() {
-		socket.removeListener("user",user);
-		socket.removeListener("disconnect",disconnected);
-		socket.disconnect();
+		if (socket) {
+			killSocket();
+			socket.disconnect();
+			socket = null;
+		}
 	}
 
 	var user_id;
