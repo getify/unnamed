@@ -42,20 +42,26 @@ function connection(socket) {
 		}
 		else {
 			socket.emit("invalid_user");
-			// TODO: close socket
+			doDisconnect();
 		}
 	}
 
-	function disconnect() {
+	function disconnected() {
 		if (user_id && user_list[user_id]) {
 			user_list[user_id].socket = null;
 		}
 	}
 
+	function doDisconnect() {
+		socket.removeListener("user",user);
+		socket.removeListener("disconnect",disconnected);
+		socket.disconnect();
+	}
+
 	var user_id;
 
 	socket.on("user",user);
-	socket.on("disconnect",disconnect);
+	socket.on("disconnect",disconnected);
 }
 
 function init(socketio,users) {

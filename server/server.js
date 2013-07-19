@@ -165,11 +165,11 @@ io.configure(function(){
 	io.enable("browser client etag"); // apply etag caching logic based on version number
 	io.set("log level", 1); // reduce logging
 	io.set("transports", [
-		"websocket"
-		, "flashsocket"
-		, "htmlfile"
-		, "xhr-polling"
-		, "jsonp-polling"
+		"websocket",
+		"flashsocket",
+		"htmlfile",
+		"xhr-polling",
+		"jsonp-polling"
 	]);
 });
 

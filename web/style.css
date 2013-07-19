@@ -27,4 +27,10 @@ html, body { margin:0px; padding:0px; height:100%; }
 	#captureme video { display:table; margin:0px auto; z-index:1; }
 	#captureme #btncontainer { position:absolute; left:0px; top:5px; width:100%; text-align:center; z-index:10; }
 
+#areyouready { display:none; position:absolute; width:300px; height:100px; left:50%; top:50%; border:5px solid rgba(150,150,150,0.6); border-radius:10px; background-color:#fff; background-clip:padding-box; z-index:1001;
+	-ms-transform:translate(-150px,-50px); -webkit-transform:translate(-150px,-50px); transform:translate(-150px,-50px);
+	-moz-box-sizing:border-box; box-sizing:border-box;
+}
+	#areyouready input { display:block; border:3px outset #aaa; border-radius:5px; font-size:25px; margin:21px auto; padding:8px 18px; }
+
 #game { display:none; position:relative; z-index:2; }

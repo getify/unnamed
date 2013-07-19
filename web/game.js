@@ -1,8 +1,27 @@
 (function(global,unnamed){
 
-	function start(){}
+	function yesImReady() {
+		$areyouready.hide();
+	}
 
-	window.unnamed.game = {
+	function showReadyPrompt() {
+		$areyouready.show();
+	}
+
+	function start(mypic) {
+		$areyouready = $("#areyouready");
+		$game = $("#game");
+
+		$areyouready.click(yesImReady);
+
+		showReadyPrompt();
+	}
+
+	var $areyouready,
+		$game
+	;
+
+	unnamed.game = {
 		start: start
 	};
 
