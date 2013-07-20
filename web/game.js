@@ -4,16 +4,59 @@
 		current_game_id = null;
 		game_points = [];
 		offset_game_points = [];
+		$points = my_board = opponent_board = playing_surface_offset = null;
 		$playingsurface.empty();
-		$points = $mine = $opponent = null;
-		next_point = 0;
+		start_point = next_point = 0;
+	}
+
+	function drawMyLines(x,y) {
+		var i, end_x = x - playing_surface_offset.left,
+			end_y = y - playing_surface_offset.top
+		;
+
+		my_board
+		.clear()
+		.startPath(game_points[0].x,game_points[0].y);
+
+		for (i=1; i<next_point; i++) {
+			my_board.defineSegments([
+				{ lineTo: [game_points[i].x, game_points[i].y] }
+			]);
+		}
+
+		if (next_point === start_point) {
+			my_board.defineSegments([
+				{ lineTo: [end_x, end_y] }
+			]);
+		}
+
+		my_board.endPath({ stroke: true });
+
+		drawOpponentLines();
+	}
+
+	// TODO: temporary hack to simulate simultaneous drawing
+	function drawOpponentLines() {
+		var i;
+
+		opponent_board
+		.clear()
+		.startPath(game_points[0].x,game_points[0].y);
+
+		for (i=1; i<=Math.min(next_point,game_points.length-1); i++) {
+			opponent_board.defineSegments([
+				{ lineTo: [game_points[i].x, game_points[i].y] }
+			]);
+		}
+
+		opponent_board.endPath({ stroke: true });
 	}
 
 	function startDragging(evt) {
 		evt.preventDefault();
 		evt.stopImmediatePropagation();
 
-		if (!dragging) {
+		if (!dragging && next_point < game_points.length) {
 			dragging = true;
 			$(document).bind("mousemove",drag).bind("mouseup",endDragging);
 
@@ -37,6 +80,11 @@
 			point = start_point;
 		}
 
+		// draw lines for already connected points
+		if (point > 0) {
+			drawMyLines(evt.pageX,evt.pageY);
+		}
+
 		if (
 			(evt.pageX >= offset_game_points[point].x1) &&
 			(evt.pageX <= offset_game_points[point].x2) &&
@@ -48,14 +96,12 @@
 				start_point = next_point;
 			}
 			else {
-				console.log("Point " + (next_point + 1));
 				next_point++;
 				start_point = next_point;
 
 				// are we done with the game?
 				if (next_point >= game_points.length) {
 					endDragging(evt);
-					next_point = 0;
 				}
 			}
 		}
@@ -68,10 +114,17 @@
 		$(document).unbind("mousemove",drag).unbind("mouseup",endDragging);
 		dragging = false;
 
-		// if we've already found a point, have to start at previously connected point
-		if (next_point > 0) {
-			start_point = next_point - 1;
+		if (next_point < game_points.length) {
+			// if we've already found a point, have to start at previously connected point
+			if (next_point > 0) {
+				start_point = next_point - 1;
+			}
 		}
+		else {
+			next_point = start_point = game_points.length;
+		}
+
+		drawMyLines();
 	}
 
 	function gameIDReceived(gameID) {
@@ -80,7 +133,7 @@
 	}
 
 	function gameDataReceived(gameData) {
-		var cnv, i, x, y, lx, ly, playing_surface_offset;
+		var cnv, i, x, y, lx, ly;
 
 		cnv = h5.canvas({
 			width: 400,
@@ -137,26 +190,41 @@
 		}
 
 		// draw opponent's game canvas
-		cnv = h5.canvas({
+		opponent_board = h5.canvas({
 			width: 400,
 			height: 400,
 			matchDimensions: true
-		});
+		})
+		.setStyles({
+			alpha: 0.6,
+			stroke: {
+				width: 6,
+				color: "orange",
+				caps: "round",
+				joints: "round"
+			}
+		})
+		.clear();
 
-		$opponent = $(cnv.element()).attr({ id: "opponent" }).appendTo($playingsurface);
-
-		cnv.clear();
+		$(opponent_board.element()).attr({ id: "opponent" }).appendTo($playingsurface);
 
 		// draw my game canvas
-		cnv = h5.canvas({
+		my_board = h5.canvas({
 			width: 400,
 			height: 400,
 			matchDimensions: true
-		});
+		})
+		.setStyles({
+			stroke: {
+				width: 2,
+				color: "black",
+				caps: "round",
+				joints: "round"
+			}
+		})
+		.clear();
 
-		$mine = $(cnv.element()).attr({ id: "mine" }).appendTo($playingsurface);
-
-		cnv.clear();
+		$(my_board.element()).attr({ id: "mine" }).appendTo($playingsurface);
 
 		playing_surface_offset = $playingsurface.offset();
 
@@ -283,10 +351,11 @@
 		$game,
 		$playingsurface,
 		$leave_game,
-
 		$points,
-		$mine,
-		$opponent
+
+		playing_surface_offset,
+		my_board,
+		opponent_board
 	;
 
 	game = unnamed.game = {
