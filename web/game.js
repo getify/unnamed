@@ -10,7 +10,54 @@
 	}
 
 	function gameDataReceived(gameData) {
-		console.log("game data: " + JSON.stringify(gameData));
+		var cnv, i, x, y, lx, ly;
+
+		cnv = h5.canvas({
+			width: 400,
+			height: 400,
+			matchDimensions: true
+		});
+
+		$playingsurface.append(cnv.element());
+
+		cnv.setStyles({
+			text: {
+				font: "8px sans-serif",
+				baseline: "top"
+			},
+			stroke: {
+				color: "black"
+			},
+			fill: {
+				color: "black"
+			}
+		});
+
+		for (i=0; i<gameData.length; i++) {
+			x = gameData[i][0];
+			y = gameData[i][1];
+			lx = gameData[i][2];
+			ly = gameData[i][3];
+
+			cnv.pushState();
+			
+			// draw the dot
+			cnv
+			.startPath(x,y)
+			.defineSegments([
+				{ arc: [x,y,4,0,Math.PI*2,true] }
+			])
+			.endPath({
+				fill: true
+			});
+
+			// print the dot label
+			cnv.text({
+				fill: [(i+1)+"",lx,ly]
+			});
+
+			cnv.popState();
+		}
 	}
 
 	function invalidGame() {
@@ -96,6 +143,7 @@
 	function init() {
 		$areyouready = $("#areyouready");
 		$game = $("#game");
+		$playingsurface = $("#playingsurface");
 		$leave_game = $("#leave_game");
 
 		$areyouready.find("input[type='button']").click(yesImReady);
@@ -109,6 +157,7 @@
 
 		$areyouready,
 		$game,
+		$playingsurface,
 		$leave_game
 	;
 
