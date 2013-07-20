@@ -16,26 +16,47 @@
 		if (!dragging) {
 			dragging = true;
 			$(document).bind("mousemove",drag).bind("mouseup",endDragging);
+
+			// if we've already found a point, have to start at previously connected point
+			if (next_point > 0) {
+				start_point = next_point - 1;
+			}
+
+			drag(evt);
 		}
 	}
 
 	function drag(evt) {
+		var point = next_point;
+
 		evt.preventDefault();
 		evt.stopImmediatePropagation();
 
-		if (
-			(evt.pageX >= offset_game_points[next_point].x1) &&
-			(evt.pageX <= offset_game_points[next_point].x2) &&
-			(evt.pageY >= offset_game_points[next_point].y1) &&
-			(evt.pageY <= offset_game_points[next_point].y2)
-		) {
-			console.log("Point " + (next_point + 1));
-			next_point++;
+		// have to start with the previously connected point
+		if (start_point < next_point) {
+			point = start_point;
+		}
 
-			// are we done with the game?
-			if (next_point >= game_points.length) {
-				endDragging(evt);
-				next_point = 0;
+		if (
+			(evt.pageX >= offset_game_points[point].x1) &&
+			(evt.pageX <= offset_game_points[point].x2) &&
+			(evt.pageY >= offset_game_points[point].y1) &&
+			(evt.pageY <= offset_game_points[point].y2)
+		) {
+			// successfully found the previous point to start from?
+			if (start_point < next_point) {
+				start_point = next_point;
+			}
+			else {
+				console.log("Point " + (next_point + 1));
+				next_point++;
+				start_point = next_point;
+
+				// are we done with the game?
+				if (next_point >= game_points.length) {
+					endDragging(evt);
+					next_point = 0;
+				}
 			}
 		}
 	}
@@ -46,6 +67,11 @@
 
 		$(document).unbind("mousemove",drag).unbind("mouseup",endDragging);
 		dragging = false;
+
+		// if we've already found a point, have to start at previously connected point
+		if (next_point > 0) {
+			start_point = next_point - 1;
+		}
 	}
 
 	function gameIDReceived(gameID) {
@@ -249,6 +275,7 @@
 		game_points = [],
 		offset_game_points = [],
 		next_point = 0,
+		start_point = 0,
 
 		dragging = false,
 
