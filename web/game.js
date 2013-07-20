@@ -1,12 +1,15 @@
 (function(global,unnamed,game){
 
 	function reset() {
-		current_game_id = null;
 		game_points = [];
 		offset_game_points = [];
-		$points = my_board = opponent_board = playing_surface_offset = null;
+		$points = my_board = opponent_board = playing_surface_offset =
+			game_timestamp_differential = next_play_step =
+			current_game_id = null
+		;
 		$playingsurface.empty();
 		start_point = next_point = 0;
+		record_plays = ASQ();
 	}
 
 	function drawMyLines(x,y) {
@@ -85,17 +88,21 @@
 			drawMyLines(evt.pageX,evt.pageY);
 		}
 
+		// did we find a point?
 		if (
 			(evt.pageX >= offset_game_points[point].x1) &&
 			(evt.pageX <= offset_game_points[point].x2) &&
 			(evt.pageY >= offset_game_points[point].y1) &&
 			(evt.pageY <= offset_game_points[point].y2)
 		) {
-			// successfully found the previous point to start from?
+			// found the previous point to re-start from?
 			if (start_point < next_point) {
 				start_point = next_point;
 			}
+			// found the next point to connect to!
 			else {
+				recordPlay(next_point);
+
 				next_point++;
 				start_point = next_point;
 
@@ -114,12 +121,14 @@
 		$(document).unbind("mousemove",drag).unbind("mouseup",endDragging);
 		dragging = false;
 
+		// any points left to play?
 		if (next_point < game_points.length) {
-			// if we've already found a point, have to start at previously connected point
+			// if we've already found a point, have to start at previously connected point next time
 			if (next_point > 0) {
 				start_point = next_point - 1;
 			}
 		}
+		// done with the game!
 		else {
 			next_point = start_point = game_points.length;
 		}
@@ -127,13 +136,29 @@
 		drawMyLines();
 	}
 
-	function gameIDReceived(gameID) {
-		console.log("game ID: " + gameID);
-		current_game_id = +gameID;
+	function recordPlay(playIndex) {
+		var timestamp = Date.now() - game_timestamp_differential;
+
+		record_plays.then(function(done,token){
+			game_socket.emit("play",token,playIndex,timestamp);
+			next_play_step = done;
+		});
 	}
 
-	function gameDataReceived(gameData) {
+	function playerDataReceived(token,gameID) {
+		if (gameID) {
+			console.log("game ID: " + gameID);
+			current_game_id = Number(gameID);
+		}
+
+		next_play_step(token);
+	}
+
+	function gameDataReceived(gamePoints,gameTimestamp) {
 		var cnv, i, x, y, lx, ly;
+
+		// use server-provided game-start timestamp to correct our own timestamps
+		game_timestamp_differential = Date.now() - Number(gameTimestamp);
 
 		cnv = h5.canvas({
 			width: 400,
@@ -158,11 +183,11 @@
 			}
 		});
 
-		for (i=0; i<gameData.length; i++) {
-			x = gameData[i][0];
-			y = gameData[i][1];
-			lx = gameData[i][2];
-			ly = gameData[i][3];
+		for (i=0; i<gamePoints.length; i++) {
+			x = gamePoints[i][0];
+			y = gamePoints[i][1];
+			lx = gamePoints[i][2];
+			ly = gamePoints[i][3];
 
 			game_points.push({
 				x: x,
@@ -228,8 +253,9 @@
 
 		playing_surface_offset = $playingsurface.offset();
 
+		// precalculate game points
 		for (i=0; i<game_points.length; i++) {
-			// calculate game points with respect to global offset
+			// account for coordinate global offset
 			offset_game_points.push({
 				x1: Math.round(game_points[i].x + playing_surface_offset.left),
 				y1: Math.round(game_points[i].y + playing_surface_offset.top)
@@ -242,6 +268,7 @@
 			offset_game_points[i].y2 = offset_game_points[i].y1 + 8;
 		}
 
+		// get ready for play!
 		$playingsurface.bind("mousedown",startDragging);
 	}
 
@@ -282,7 +309,7 @@
 		game_socket.removeListener("connect_failed",gameDisconnected);
 		game_socket.removeListener("disconnect",gameDisconnected);
 		game_socket.removeListener("invalid_game",invalidGame);
-		game_socket.removeListener("game_id",gameIDReceived);
+		game_socket.removeListener("player_data",playerDataReceived);
 		game_socket.removeListener("game_data",gameDataReceived);
 		game_socket.removeListener("game_ended",gameEnded);
 	}
@@ -304,11 +331,15 @@
 		game_socket.once("connect_failed",gameDisconnected);
 		game_socket.once("disconnect",gameDisconnected);
 		game_socket.once("invalid_game",invalidGame);
-		game_socket.on("game_id",gameIDReceived);
+		game_socket.on("player_data",playerDataReceived);
 		game_socket.on("game_data",gameDataReceived);
 		game_socket.on("game_ended",gameEnded);
 
 		game_socket.emit("user",user_id,current_game_id);
+
+		record_plays.then(function(done){
+			next_play_step = done;
+		});
 
 		$game.show();
 	}
@@ -353,9 +384,13 @@
 		$leave_game,
 		$points,
 
+		game_timestamp_differential,
 		playing_surface_offset,
 		my_board,
-		opponent_board
+		opponent_board,
+
+		record_plays = ASQ(),
+		next_play_step
 	;
 
 	game = unnamed.game = {

@@ -44,7 +44,37 @@ function getGame() {
 
 function connection(socket) {
 
+	function play(token,playIndex,timestamp) {
+		playIndex = Number(playIndex);
+
+		// valid play?
+		if (game_sessions[game_id] &&
+			game_sessions[game_id].plays[user_id] &&
+			game_sessions[game_id].plays[user_id][token] &&
+			game_sessions[game_id].plays[user_id][token].index === playIndex
+		) {
+			game_sessions[game_id].plays[user_id][token].timestamp = timestamp;
+			if (playIndex === game_sessions[game_id].data.length - 1) {
+				game_sessions[game_id].plays[user_id].finished = timestamp;
+			}
+
+			token = generateID(game_sessions[game_id].plays[user_id]);
+			game_sessions[game_id].plays[user_id][token] = {
+				index: playIndex + 1,
+				timestamp: null
+			};
+
+			socket.emit("player_data",token);
+		}
+		// signal a rejected play
+		else {
+			socket.emit("player_data_rejected",token);
+		}
+	}
+
 	function user(userID,gameID) {
+		var token;
+
 		if (user_list[userID] && user_list[userID].connected) {
 			user_id = userID;
 
@@ -61,24 +91,35 @@ function connection(socket) {
 					game_sessions[game_id].users.push(user_id);
 				}
 				socket.join(game_id);
+				game_sessions[game_id].plays[user_id] =
+					game_sessions[game_id].plays[user_id] || {}
+				;
 			}
 			else {
 				game_id = generateID(game_sessions);
 				game_sessions[game_id] = {
 					data: getGame(),
 					users: [user_id],
-					started: false
+					started: false,
+					plays: {}
 				};
 				user_list[user_id].game = game_id;
+				game_sessions[game_id].plays[user_id] = {};
 				socket.join(game_id);
 			}
 
-			socket.emit("game_id",game_id);
+			token = generateID(game_sessions[game_id].plays[user_id]);
+			game_sessions[game_id].plays[user_id][token] = {
+				index: 0,
+				timestamp: null
+			};
+
+			socket.emit("player_data",token,game_id);
 
 			// are both users joined to the same game now?
 			if (game_sessions[game_id].users.length === 2) {
 				game_sessions[game_id].started = true;
-				io.of("/game").in(game_id).emit("game_data",game_sessions[game_id].data);
+				io.of("/game").in(game_id).emit("game_data",game_sessions[game_id].data,Date.now());
 			}
 		}
 		else {
@@ -90,6 +131,7 @@ function connection(socket) {
 	function killSocket() {
 		socket.removeListener("user",user);
 		socket.removeListener("disconnect",disconnected);
+		socket.removeListener("play",play);
 	}
 
 	function disconnected() {
@@ -143,6 +185,7 @@ function connection(socket) {
 
 	socket.on("user",user);
 	socket.on("disconnect",disconnected);
+	socket.on("play",play);
 }
 
 
