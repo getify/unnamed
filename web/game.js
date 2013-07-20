@@ -2,6 +2,50 @@
 
 	function reset() {
 		current_game_id = null;
+		game_points = [];
+		offset_game_points = [];
+		$playingsurface.empty();
+		$points = $mine = $opponent = null;
+		next_point = 0;
+	}
+
+	function startDragging(evt) {
+		evt.preventDefault();
+		evt.stopImmediatePropagation();
+
+		if (!dragging) {
+			dragging = true;
+			$(document).bind("mousemove",drag).bind("mouseup",endDragging);
+		}
+	}
+
+	function drag(evt) {
+		evt.preventDefault();
+		evt.stopImmediatePropagation();
+
+		if (
+			(evt.pageX >= offset_game_points[next_point].x1) &&
+			(evt.pageX <= offset_game_points[next_point].x2) &&
+			(evt.pageY >= offset_game_points[next_point].y1) &&
+			(evt.pageY <= offset_game_points[next_point].y2)
+		) {
+			console.log("Point " + (next_point + 1));
+			next_point++;
+
+			// are we done with the game?
+			if (next_point >= game_points.length) {
+				endDragging(evt);
+				next_point = 0;
+			}
+		}
+	}
+
+	function endDragging(evt) {
+		evt.preventDefault();
+		evt.stopImmediatePropagation();
+
+		$(document).unbind("mousemove",drag).unbind("mouseup",endDragging);
+		dragging = false;
 	}
 
 	function gameIDReceived(gameID) {
@@ -10,7 +54,7 @@
 	}
 
 	function gameDataReceived(gameData) {
-		var cnv, i, x, y, lx, ly;
+		var cnv, i, x, y, lx, ly, playing_surface_offset;
 
 		cnv = h5.canvas({
 			width: 400,
@@ -18,9 +62,11 @@
 			matchDimensions: true
 		});
 
-		$playingsurface.append(cnv.element());
+		$points = $(cnv.element()).attr({ id: "points" }).appendTo($playingsurface);
 
-		cnv.setStyles({
+		cnv
+		.clear()
+		.setStyles({
 			text: {
 				font: "8px sans-serif",
 				baseline: "top"
@@ -38,6 +84,11 @@
 			y = gameData[i][1];
 			lx = gameData[i][2];
 			ly = gameData[i][3];
+
+			game_points.push({
+				x: x,
+				y: y
+			});
 
 			cnv.pushState();
 			
@@ -58,6 +109,46 @@
 
 			cnv.popState();
 		}
+
+		// draw opponent's game canvas
+		cnv = h5.canvas({
+			width: 400,
+			height: 400,
+			matchDimensions: true
+		});
+
+		$opponent = $(cnv.element()).attr({ id: "opponent" }).appendTo($playingsurface);
+
+		cnv.clear();
+
+		// draw my game canvas
+		cnv = h5.canvas({
+			width: 400,
+			height: 400,
+			matchDimensions: true
+		});
+
+		$mine = $(cnv.element()).attr({ id: "mine" }).appendTo($playingsurface);
+
+		cnv.clear();
+
+		playing_surface_offset = $playingsurface.offset();
+
+		for (i=0; i<game_points.length; i++) {
+			// calculate game points with respect to global offset
+			offset_game_points.push({
+				x1: Math.round(game_points[i].x + playing_surface_offset.left),
+				y1: Math.round(game_points[i].y + playing_surface_offset.top)
+			});
+
+			// expand game points' hit areas to make the game easier to play
+			offset_game_points[i].x1 -= 4;
+			offset_game_points[i].y1 -= 4;
+			offset_game_points[i].x2 = offset_game_points[i].x1 + 8;
+			offset_game_points[i].y2 = offset_game_points[i].y1 + 8;
+		}
+
+		$playingsurface.bind("mousedown",startDragging);
 	}
 
 	function invalidGame() {
@@ -155,10 +246,20 @@
 		mypic,
 		current_game_id,
 
+		game_points = [],
+		offset_game_points = [],
+		next_point = 0,
+
+		dragging = false,
+
 		$areyouready,
 		$game,
 		$playingsurface,
-		$leave_game
+		$leave_game,
+
+		$points,
+		$mine,
+		$opponent
 	;
 
 	game = unnamed.game = {

@@ -1,6 +1,6 @@
 html, body { margin:0px; padding:0px; height:100%; }
 
-#content { position:relative; overflow:auto; height:100%;
+#content { position:relative; height:100%;
 	-moz-box-sizing:border-box; box-sizing:border-box;
 }
 
@@ -34,3 +34,5 @@ html, body { margin:0px; padding:0px; height:100%; }
 	#areyouready input[type='button'] { display:block; border:3px outset #aaa; border-radius:5px; font-size:25px; margin:21px auto; padding:8px 18px; }
 
 #game { display:none; position:relative; z-index:2; }
+	#game #playingsurface { position:relative; width:400px; height:400px; }
+		#game #playingsurface canvas { position:absolute; width:400px; height:400px; left:0px; top:0px; }
