@@ -34,19 +34,16 @@
 		}
 
 		my_board.endPath({ stroke: true });
-
-		drawOpponentLines();
 	}
 
-	// TODO: temporary hack to simulate simultaneous drawing
-	function drawOpponentLines() {
+	function drawOpponentLines(point) {
 		var i;
 
 		opponent_board
 		.clear()
 		.startPath(game_points[0].x,game_points[0].y);
 
-		for (i=1; i<=Math.min(next_point,game_points.length-1); i++) {
+		for (i=1; i<=Math.min(point,game_points.length-1); i++) {
 			opponent_board.defineSegments([
 				{ lineTo: [game_points[i].x, game_points[i].y] }
 			]);
@@ -151,7 +148,12 @@
 			current_game_id = Number(gameID);
 		}
 
-		next_play_step(token);
+		if (next_play_step) {
+			next_play_step(token);
+		}
+		else {
+			console.log("ERROR(playerDataReceived): next step not yet registered");
+		}
 	}
 
 	function gameDataReceived(gamePoints,gameTimestamp) {
@@ -310,6 +312,7 @@
 		game_socket.removeListener("disconnect",gameDisconnected);
 		game_socket.removeListener("invalid_game",invalidGame);
 		game_socket.removeListener("player_data",playerDataReceived);
+		game_socket.removeListener("opponent_play",drawOpponentLines);
 		game_socket.removeListener("game_data",gameDataReceived);
 		game_socket.removeListener("game_ended",gameEnded);
 	}
@@ -332,6 +335,7 @@
 		game_socket.once("disconnect",gameDisconnected);
 		game_socket.once("invalid_game",invalidGame);
 		game_socket.on("player_data",playerDataReceived);
+		game_socket.on("opponent_play",drawOpponentLines);
 		game_socket.on("game_data",gameDataReceived);
 		game_socket.on("game_ended",gameEnded);
 

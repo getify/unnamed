@@ -65,6 +65,10 @@ function connection(socket) {
 			};
 
 			socket.emit("player_data",token);
+
+			// TODO: temporary hack until we have peer-to-peer via WebRTC data channel
+			// broadcast as opponent play to other user(s) in game
+			socket.broadcast.to(game_id).emit("opponent_play",playIndex);
 		}
 		// signal a rejected play
 		else {
