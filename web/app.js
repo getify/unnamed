@@ -47,6 +47,7 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 	function killSocketNamespace() {
 		// NOTE: this is a hack, the socket.io API seems to misbehave without it
 		delete io.sockets[unnamed.SERVER]["namespaces"]["/"];
+		delete io.sockets[unnamed.SERVER]["namespaces"]["/rtcsignals"];
 		delete io.sockets[unnamed.SERVER]["namespaces"]["/leaderboard"];
 		delete io.sockets[unnamed.SERVER]["namespaces"]["/game"];
 	}
@@ -297,6 +298,7 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 			$captureme.find("#btn").click(doCapture);
 
 			unnamed.game.init();
+			unnamed.RTC.init();
 
 			if (user_id) {
 				loggedIn();

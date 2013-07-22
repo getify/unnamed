@@ -1,6 +1,9 @@
 (function(global,unnamed,game){
 
 	function reset() {
+		console.log("user (" + user_id + ") game reset");
+		unnamed.RTC.leave(/*sendClose=*/true); // leave the RTC channel
+
 		game_points = [];
 		offset_game_points = [];
 		$points = my_board = opponent_board = playing_surface_offset =
@@ -8,7 +11,7 @@
 			current_game_id = null
 		;
 		$playingsurface.empty();
-		start_point = next_point = 0;
+		game_status = start_point = next_point = 0;
 		record_plays = ASQ();
 	}
 
@@ -143,24 +146,56 @@
 	}
 
 	function playerDataReceived(token,gameID) {
+		console.log("user (" + user_id + ") player data received");
 		if (gameID) {
-			console.log("game ID: " + gameID);
+			console.log("user (" + user_id + ") game ID: " + gameID);
 			current_game_id = Number(gameID);
+			unnamed.RTC.join(current_game_id,user_id);
 		}
 
 		if (next_play_step) {
 			next_play_step(token);
 		}
 		else {
-			console.log("ERROR(playerDataReceived): next step not yet registered");
+			console.log("user (" + user_id + ") ERROR(playerDataReceived): next step not yet registered");
 		}
 	}
 
-	function gameDataReceived(gamePoints,gameTimestamp) {
-		var cnv, i, x, y, lx, ly;
+	function gameDataReceived(gamePoints,players,gameTimestamp) {
+		console.log("user (" + user_id + ") game data received");
+		var rtcCaller, steps;
+
+		// by convention, the first player in the player list will be the "caller" (for RTC purposes)
+		rtcCaller = (players.indexOf(user_id) === 0);
 
 		// use server-provided game-start timestamp to correct our own timestamps
 		game_timestamp_differential = Date.now() - Number(gameTimestamp);
+
+		// initiate the RTC peer-to-peer connection
+		if (rtcCaller) {
+			steps = unnamed.RTC.caller();
+		}
+		else {
+			steps = unnamed.RTC.receiver();
+		}
+
+		steps
+		.val(function(){
+			buildGame(gamePoints);
+		})
+		.or(function(err){
+			console.log("user (" + user_id + ") error!!");
+			console.log(err+"");
+			invalidGame();
+		});
+	}
+
+	function buildGame(gamePoints) {
+		console.log("user (" + user_id + ") building game");
+
+		var cnv, i, x, y, lx, ly;
+
+		game_status = 2;
 
 		cnv = h5.canvas({
 			width: 400,
@@ -275,31 +310,47 @@
 	}
 
 	function invalidGame() {
-		abort();
-		showReadyPrompt();
+		console.log("user (" + user_id + ") invalid game");
+		gameEndReset();
 		alert("Invalid game. Let's try again!");
 	}
 
-	function gameEnded(gameID) {
-		if (current_game_id === +gameID) {
-			abort();
-			showReadyPrompt();
-			alert("Game ended. Play again!");
-		}
+	function gameDisconnected() {
+		console.log("user (" + user_id + ") game disconnected");
+		gameEndReset();
+		alert("Game ended. Play again!");
 	}
 
-	function gameDisconnected() {
+	function gameLeft(evt) {
+		evt.preventDefault();
+		evt.stopImmediatePropagation();
+
+		console.log("user (" + user_id + ") left game");
+
+		gameEndReset();
+	}
+
+	function gameEndReset() {
+		console.log("user (" + user_id + ") game end reset");
 		abort();
 		showReadyPrompt();
 	}
 
-	function doGameDisconnect() {
-		gameEnded(current_game_id);
+	function gameRTCForceClosed() {
+		console.log("user (" + user_id + ") game rtc force closed");
+		if (game_status === 1) {
+			invalidGame();
+		}
+		else if (game_status === 2) {
+			gameDisconnected();
+		}
 	}
 
 	function abort() {
+		console.log("user (" + user_id + ") game abort");
 		if (game_socket) {
 			killSocket();
+			console.log("user (" + user_id + ") ***** disconnecting game socket *****");
 			game_socket.disconnect();
 			game_socket = null;
 		}
@@ -307,14 +358,29 @@
 		reset();
 	}
 
+	function socketGameEnded() {
+		console.log("user (" + user_id + ") socketGameEnded");
+		gameDisconnected();
+	}
+
+	function socketConnectFailed() {
+		console.log("user (" + user_id + ") connectFailed");
+		gameDisconnected();
+	}
+
+	function socketDisconnect() {
+		console.log("user (" + user_id + ") socketDisconnect");
+		gameDisconnected();
+	}
+
 	function killSocket() {
-		game_socket.removeListener("connect_failed",gameDisconnected);
-		game_socket.removeListener("disconnect",gameDisconnected);
+		game_socket.removeListener("connect_failed",socketConnectFailed);
+		game_socket.removeListener("disconnect",socketDisconnect);
 		game_socket.removeListener("invalid_game",invalidGame);
 		game_socket.removeListener("player_data",playerDataReceived);
 		game_socket.removeListener("opponent_play",drawOpponentLines);
 		game_socket.removeListener("game_data",gameDataReceived);
-		game_socket.removeListener("game_ended",gameEnded);
+		game_socket.removeListener("game_ended",socketGameEnded);
 	}
 
 	// kill socket namespace cache so we can reconnect to it later
@@ -324,26 +390,32 @@
 	}
 
 	function yesImReady() {
+		game_status = 1;
+
 		$areyouready.hide();
+
+		record_plays.then(function(done){
+			console.log("user (" + user_id + ") defining next_play_step");
+			next_play_step = done;
+		});
 
 		// TODO: temporary hack
 		current_game_id = +($("#join_game_id").val());
 		$("#join_game_id").val("");
 
 		game_socket = io.connect(global.unnamed.SERVER + "/game",global.unnamed.SOCKET_IO_CONNECT_OPTS);
-		game_socket.once("connect_failed",gameDisconnected);
-		game_socket.once("disconnect",gameDisconnected);
+		game_socket.once("connect_failed",socketConnectFailed);
+		game_socket.once("disconnect",socketDisconnect);
 		game_socket.once("invalid_game",invalidGame);
 		game_socket.on("player_data",playerDataReceived);
 		game_socket.on("opponent_play",drawOpponentLines);
 		game_socket.on("game_data",gameDataReceived);
-		game_socket.on("game_ended",gameEnded);
+		game_socket.on("game_ended",socketGameEnded);
 
-		game_socket.emit("user",user_id,current_game_id);
-
-		record_plays.then(function(done){
-			next_play_step = done;
-		});
+		setTimeout(function(){
+			console.log("user (" + user_id + ") joining game: " + current_game_id);
+			game_socket.emit("user",user_id,current_game_id);
+		},0);
 
 		$game.show();
 	}
@@ -367,13 +439,17 @@
 		$leave_game = $("#leave_game");
 
 		$areyouready.find("input[type='button']").click(yesImReady);
-		$leave_game.click(doGameDisconnect);
+		$leave_game.click(gameLeft);
+
+		unnamed.RTC.onForceClosed = gameRTCForceClosed;
 	}
 
 	var game_socket,
 		user_id,
 		mypic,
 		current_game_id,
+
+		game_status = 0,
 
 		game_points = [],
 		offset_game_points = [],
@@ -400,7 +476,12 @@
 	game = unnamed.game = {
 		init: init,
 		start: start,
-		abort: abort
+		abort: abort,
+		invalidGame: invalidGame,
+		gameDisconnected: function(){
+			console.log("user (" + user_id + ") game manually disconnected");
+			gameDisconnected();
+		}
 	};
 
 })(window,window.unnamed);

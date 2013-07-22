@@ -140,6 +140,7 @@ var global = this,
 
 	Leaderboard = require("./leaderboard.js"),
 	Game = require("./game.js"),
+	RTCSignals = require("./rtcsignals.js"),
 
 	ASQ = require("asynquence"),
 
@@ -182,3 +183,6 @@ Leaderboard.init(io,users);
 
 // init the Game/socket
 Game.init(io,users);
+
+// init the RTC Signal Manager/socket
+RTCSignals.init(io);

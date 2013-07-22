@@ -77,6 +77,7 @@ function connection(socket) {
 	}
 
 	function user(userID,gameID) {
+		console.log("user (" + userID + ") joining game: " + gameID);
 		var token;
 
 		if (user_list[userID] && user_list[userID].connected) {
@@ -89,6 +90,7 @@ function connection(socket) {
 					game_id === gameID
 				)
 			) {
+				console.log("user (" + user_id + ") joined existing game: " + gameID);
 				game_id = gameID;
 				user_list[user_id].game = gameID;
 				if (!~game_sessions[game_id].users.indexOf(user_id)) {
@@ -101,6 +103,7 @@ function connection(socket) {
 			}
 			else {
 				game_id = generateID(game_sessions);
+				console.log("user (" + user_id + ") created new game: " + game_id);
 				game_sessions[game_id] = {
 					data: getGame(),
 					users: [user_id],
@@ -122,11 +125,13 @@ function connection(socket) {
 
 			// are both users joined to the same game now?
 			if (game_sessions[game_id].users.length === 2) {
-				game_sessions[game_id].started = true;
-				io.of("/game").in(game_id).emit("game_data",game_sessions[game_id].data,Date.now());
+				game_sessions[game_id].started = Date.now();
+				io.of("/game").in(game_id).emit("game_data",game_sessions[game_id].data,game_sessions[game_id].users,game_sessions[game_id].started);
 			}
 		}
 		else {
+			console.log("invalid game for user (" + userID + ") and game (" + gameID + ")");
+			console.log("user (" + userID + ") connected: " + user_list[userID].connected);
 			socket.emit("invalid_game");
 			doDisconnect();
 		}
@@ -134,11 +139,17 @@ function connection(socket) {
 
 	function killSocket() {
 		socket.removeListener("user",user);
-		socket.removeListener("disconnect",disconnected);
+		socket.removeListener("disconnect",socketDisconnected);
 		socket.removeListener("play",play);
 	}
 
+	function socketDisconnected() {
+		console.log("user (" + user_id + ") socket disconnected");
+		disconnected();
+	}
+
 	function disconnected() {
+		console.log("user (" + user_id + ") disconnected from game: " + game_id);
 		if (user_id && user_list[user_id]) {
 			user_list[user_id].game = null;
 
@@ -146,6 +157,8 @@ function connection(socket) {
 				socket.leave(game_id);
 
 				if (game_sessions[game_id]) {
+					console.log("via user (" + user_id + "), for game (" + game_id + "), number of users: " + game_sessions[game_id].users.length);
+
 					// remove current user from the game
 					game_sessions[game_id].users =
 						game_sessions[game_id].users.filter(function(userID){
@@ -153,12 +166,16 @@ function connection(socket) {
 						})
 					;
 
+					console.log("via user (" + user_id + "), for game (" + game_id + "), number of users: " + game_sessions[game_id].users.length);
+
 					// if the game has no more users, clean up the record
 					if (game_sessions[game_id].users.length === 0) {
+						console.log("via user (" + user_id + "), no more users in game: " + game_id);
 						delete game_sessions[game_id];
 					}
 					// otherwise notify other user(s) about game end
 					else if (game_sessions[game_id].started) {
+						console.log("via user (" + user_id + "), game ended: " + game_id);
 						game_sessions[game_id].started = false;
 						socket.broadcast.to(game_id).emit("game_ended",game_id);
 					}
@@ -175,6 +192,7 @@ function connection(socket) {
 	}
 
 	function doDisconnect() {
+		console.log("user (" + user_id + ") doDisconnect");
 		if (socket) {
 			killSocket();
 			disconnected();
@@ -188,7 +206,7 @@ function connection(socket) {
 	;
 
 	socket.on("user",user);
-	socket.on("disconnect",disconnected);
+	socket.on("disconnect",socketDisconnected);
 	socket.on("play",play);
 }
 
