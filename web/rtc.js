@@ -14,7 +14,8 @@
 		rtc_signal_exchange = ASQ();
 		resetWaitFor();
 		resetMessageQueue();
-		current_channel_id = pc = wait_for_complete = null;
+		data_channel.onopen = data_channel.onerror = data_channel.onmessage = null;
+		data_channel = current_channel_id = pc = wait_for_complete = null;
 	}
 
 	function resetMessageQueue(){
@@ -181,7 +182,6 @@
 			h5
 			.userMedia({
 				audio: true,
-				video: true,
 				fake: true
 			})
 			.stream(function(src){
@@ -202,7 +202,36 @@
 		pc = createPeerConnection({ iceServers: iceServers });
 		pc.onicecandidate = onIceCandidate;
 
-		message_queue_ready();
+		try {
+			createDataChannel();
+			message_queue_ready();
+		}
+		catch (err) {
+			console.log("createDataChannel",err.stack);
+			rtc_signal_exchange.abort();
+		}
+	}
+
+	function onDataChannelError(err) {
+		console.log("onDataChannelError",err.stack);
+	}
+
+	function createDataChannel() {
+		console.log("creating data channel");
+		data_channel = pc.createDataChannel("game_" + current_channel_id,data_channel_opts);
+		// Effing browser sniff hacks
+		if (is_moz) {
+			data_channel.binaryType = "blob";
+		}
+		data_channel.onopen = function(){
+			console.log("data channel opened");
+		};
+		data_channel.onmessage = onDataChannelMessage;
+		data_channel.onerror = onDataChannelError;
+	}
+
+	function onDataChannelMessage(evt) {
+		console.log("data channel message(s) received:",evt.data);
 	}
 
 	// the initiator of the RTC peer-to-peer connection request
@@ -232,6 +261,9 @@
 		.val(function(){
 			// let receiver know handshake is complete
 			signal({ handshake: true });
+		})
+		.val(function(){
+			data_channel.send("hello from caller");
 		})
 		.or(function(err){
 			console.log("caller error",err.stack);
@@ -274,6 +306,9 @@
 		.val(onSessionDescription)
 		.seq(function(){
 			return wait_for;
+		})
+		.val(function(){
+			data_channel.send("hello from receiver");
 		})
 		.or(function(err){
 			console.log("receiver error",err.stack);
@@ -344,6 +379,8 @@
 		rtc_signal_exchange = ASQ(),
 		ice_queue = [],
 
+		data_channel,
+
 		wait_for,
 		wait_for_complete,
 
@@ -358,6 +395,8 @@
 			}
 		],
 
+		data_channel_opts = {},
+
 		message_queue,
 		message_queue_ready
 	;
@@ -368,6 +407,15 @@
 	// Effing browser sniff hacks
 	if (is_moz) {
 		constraints.mandatory.offerToReceiveAudio = true;
+		constraints.mandatory.offerToReceiveVideo = true;
+	}
+	else {
+		// no one really supports "reliable" yet :(
+		data_channel_opts.reliable = false;
+		constraints.optional.push(
+			//{ "DtlsSrtpKeyAgreement": true },
+			{ "RtpDataChannels": true }
+		);
 	}
 
 	RTC = window.unnamed.RTC = {
