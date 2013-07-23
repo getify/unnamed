@@ -131,7 +131,7 @@ function connection(socket) {
 		}
 		else {
 			console.log("invalid game for user (" + userID + ") and game (" + gameID + ")");
-			console.log("user (" + userID + ") connected: " + user_list[userID].connected);
+			console.log("user (" + userID + ") connected: " + (user_list[userID] && user_list[userID].connected));
 			socket.emit("invalid_game");
 			doDisconnect();
 		}

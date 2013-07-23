@@ -14,7 +14,9 @@
 		rtc_signal_exchange = ASQ();
 		resetWaitFor();
 		resetMessageQueue();
-		data_channel.onopen = data_channel.onerror = data_channel.onmessage = null;
+		if (data_channel) {
+			data_channel.onopen = data_channel.onerror = data_channel.onmessage = null;
+		}
 		data_channel = current_channel_id = pc = wait_for_complete = null;
 	}
 
@@ -54,10 +56,10 @@
 		});
 	}
 
-	function createPeerConnection(config) {
-		if (global.RTCPeerConnection) return new RTCPeerConnection(config);
-		else if (global.webkitRTCPeerConnection) return new webkitRTCPeerConnection(config);
-		else if (global.mozRTCPeerConnection) return new mozRTCPeerConnection(config);
+	function createPeerConnection(config,optional) {
+		if (global.RTCPeerConnection) return new RTCPeerConnection(config,optional);
+		else if (global.webkitRTCPeerConnection) return new webkitRTCPeerConnection(config,optional);
+		else if (global.mozRTCPeerConnection) return new mozRTCPeerConnection(config,optional);
 		throw new Error("RTC Peer Connection not available");
 	}
 
@@ -155,6 +157,8 @@
 
 	// From: https://googledrive.com/host/0B6GWd_dUUTT8RzVSRVU2MlIxcm8/RTCPeerConnection-v1.5.js
 	function getInteropSDP(sdp) {
+		return sdp;
+
 		var inline = randomChars(40) + "\r\n";
 
 		sdp = !~sdp.indexOf("a=crypto") ?
@@ -174,11 +178,38 @@
 		});
 	}
 
+	function onDataChannelError(err) {
+		console.log("onDataChannelError",err.stack);
+	}
+
+	function createDataChannel() {
+		console.log("creating data channel");
+		data_channel = pc.createDataChannel(
+			"game_" + current_channel_id,
+			data_channel_opts
+		);
+
+		// Effing browser sniff hacks
+		if (is_moz) {
+			data_channel.binaryType = "blob";
+		}
+
+		data_channel.onopen = function(){
+			console.log("data channel opened");
+		};
+		data_channel.onmessage = onDataChannelMessage;
+		data_channel.onerror = onDataChannelError;
+	}
+
+	function onDataChannelMessage(evt) {
+		console.log("data channel message(s) received:",evt.data);
+	}
+
 	// Effing browser sniff hacks
-	// mozilla requires a fake/unused stream to initiate peer-connection
+	// firefox requires a fake/unused stream to initiate peer-connection
 	function getFakeMozStream() {
 		return ASQ(function(done){
-			console.log("creating fake streams for mozilla");
+			console.log("creating fake streams for firefox");
 			h5
 			.userMedia({
 				audio: true,
@@ -188,8 +219,11 @@
 				try {
 					pc.addStream(src);
 					console.log("fake streams created");
-				} catch (err) { console.log("errrrrr",err); }
-				done();
+					done();
+				}
+				catch (err) {
+					done.fail("fakeMozStream failed",err);
+				}
 			});
 		});
 	}
@@ -198,8 +232,14 @@
 		current_channel_id = channelID;
 		from_id = fromID;
 
+		console.log("from (" + fromID + ") joining channel: " + channelID);
 		rtcsignals_socket.emit("join_channel",channelID,fromID);
-		pc = createPeerConnection({ iceServers: iceServers });
+
+		console.log("creating peer-connection");
+		pc = createPeerConnection(
+			{ iceServers: iceServers },
+			peer_connection_options
+		);
 		pc.onicecandidate = onIceCandidate;
 
 		try {
@@ -212,34 +252,16 @@
 		}
 	}
 
-	function onDataChannelError(err) {
-		console.log("onDataChannelError",err.stack);
-	}
-
-	function createDataChannel() {
-		console.log("creating data channel");
-		data_channel = pc.createDataChannel("game_" + current_channel_id,data_channel_opts);
-		// Effing browser sniff hacks
-		if (is_moz) {
-			data_channel.binaryType = "blob";
-		}
-		data_channel.onopen = function(){
-			console.log("data channel opened");
-		};
-		data_channel.onmessage = onDataChannelMessage;
-		data_channel.onerror = onDataChannelError;
-	}
-
-	function onDataChannelMessage(evt) {
-		console.log("data channel message(s) received:",evt.data);
-	}
-
 	// the initiator of the RTC peer-to-peer connection request
 	function caller() {
 		console.log("caller");
 
+		data_channel.onopen = function() {
+			data_channel.send("hello from caller");
+		};
+
 		// Effing browser sniff hacks
-		// mozilla requires a fake/unused stream to initiate peer-connection
+		// firefox requires a fake/unused stream to initiate peer-connection
 		if (is_moz) {
 			rtc_signal_exchange.seq(getFakeMozStream);
 		}
@@ -247,11 +269,12 @@
 		rtc_signal_exchange
 		.then(function(done){
 			console.log("creating offer");
+			console.log(media_constraints);
 			pc.createOffer(function(desc){
 				console.log("offer created");
 				desc.sdp = getInteropSDP(desc.sdp);
 				done.apply(done,arguments);
-			},done.fail,constraints);
+			},done.fail,media_constraints);
 		})
 		// caller's local description created, and sent to receiver
 		.val(onSessionDescription)
@@ -261,9 +284,6 @@
 		.val(function(){
 			// let receiver know handshake is complete
 			signal({ handshake: true });
-		})
-		.val(function(){
-			data_channel.send("hello from caller");
 		})
 		.or(function(err){
 			console.log("caller error",err.stack);
@@ -276,8 +296,12 @@
 	function receiver() {
 		console.log("receiver");
 
+		data_channel.onopen = function() {
+			data_channel.send("hello from receiver");
+		};
+
 		// Effing browser sniff hacks
-		// mozilla requires a fake/unused stream to initiate peer-connection
+		// firefox requires a fake/unused stream to initiate peer-connection
 		if (is_moz) {
 			rtc_signal_exchange.seq(getFakeMozStream);
 		}
@@ -301,14 +325,11 @@
 				console.log("answer created");
 				desc.sdp = getInteropSDP(desc.sdp);
 				done.apply(done,arguments);
-			},done.fail,constraints);
+			},done.fail,media_constraints);
 		})
 		.val(onSessionDescription)
 		.seq(function(){
 			return wait_for;
-		})
-		.val(function(){
-			data_channel.send("hello from receiver");
 		})
 		.or(function(err){
 			console.log("receiver error",err.stack);
@@ -384,10 +405,18 @@
 		wait_for,
 		wait_for_complete,
 
-		constraints = {
+		media_constraints = {
 			optional: [],
 			mandatory: {}
 		},
+
+		peer_connection_options = (
+			!is_moz ?
+			{
+				optional: [{ RtpDataChannels: true }]
+			} :
+			undefined
+		),
 
 		iceServers = [
 			{
@@ -406,16 +435,15 @@
 
 	// Effing browser sniff hacks
 	if (is_moz) {
-		constraints.mandatory.offerToReceiveAudio = true;
-		constraints.mandatory.offerToReceiveVideo = true;
+		media_constraints.mandatory.OfferToReceiveAudio = true;
+		media_constraints.mandatory.OfferToReceiveVideo = true;
 	}
 	else {
+		media_constraints.mandatory.OfferToReceiveAudio = false;
+		media_constraints.mandatory.OfferToReceiveVideo = false;
+
 		// no one really supports "reliable" yet :(
 		data_channel_opts.reliable = false;
-		constraints.optional.push(
-			//{ "DtlsSrtpKeyAgreement": true },
-			{ "RtpDataChannels": true }
-		);
 	}
 
 	RTC = window.unnamed.RTC = {
