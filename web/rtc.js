@@ -157,8 +157,6 @@
 
 	// From: https://googledrive.com/host/0B6GWd_dUUTT8RzVSRVU2MlIxcm8/RTCPeerConnection-v1.5.js
 	function getInteropSDP(sdp) {
-		return sdp;
-
 		var inline = randomChars(40) + "\r\n";
 
 		sdp = !~sdp.indexOf("a=crypto") ?
@@ -194,9 +192,6 @@
 			data_channel.binaryType = "blob";
 		}
 
-		data_channel.onopen = function(){
-			console.log("data channel opened");
-		};
 		data_channel.onmessage = onDataChannelMessage;
 		data_channel.onerror = onDataChannelError;
 	}
@@ -257,6 +252,7 @@
 		console.log("caller");
 
 		data_channel.onopen = function() {
+			console.log("**** data channel open! ****");
 			data_channel.send("hello from caller");
 		};
 
@@ -297,6 +293,7 @@
 		console.log("receiver");
 
 		data_channel.onopen = function() {
+			console.log("**** data channel open! ****");
 			data_channel.send("hello from receiver");
 		};
 
