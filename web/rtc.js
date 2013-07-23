@@ -12,6 +12,10 @@
 			rtc_signal_exchange.abort();
 		}
 		rtc_signal_exchange = ASQ();
+		if (data_channel_ready) {
+			data_channel_ready.abort();
+		}
+		data_channel_ready = ASQ();
 		resetWaitFor();
 		resetMessageQueue();
 		if (data_channel) {
@@ -196,8 +200,29 @@
 		data_channel.onerror = onDataChannelError;
 	}
 
+	function sendMessage(msg) {
+		if (data_channel) {
+			if (typeof msg !== "string") msg = JSON.stringify(msg);
+			try {
+				data_channel.send(msg);
+			}
+			catch (err) {
+				console.log(err);
+				console.log(msg);
+				console.log(typeof msg);
+				console.log(msg.length);
+				throw new Error("STOP IT!");
+			}
+		}
+	}
+
 	function onDataChannelMessage(evt) {
-		console.log("data channel message(s) received:",evt.data);
+		if (RTC.onMessage) {
+			// let's only allow sending/receving JSON-parseable string data!
+			try {
+				RTC.onMessage(JSON.parse(evt.data));
+			} catch (err) {}
+		}
 	}
 
 	// Effing browser sniff hacks
@@ -239,6 +264,9 @@
 
 		try {
 			createDataChannel();
+			data_channel_ready.then(function(done){
+				data_channel.onopen = done;
+			});
 			message_queue_ready();
 		}
 		catch (err) {
@@ -250,11 +278,6 @@
 	// the initiator of the RTC peer-to-peer connection request
 	function caller() {
 		console.log("caller");
-
-		data_channel.onopen = function() {
-			console.log("**** data channel open! ****");
-			data_channel.send("hello from caller");
-		};
 
 		// Effing browser sniff hacks
 		// firefox requires a fake/unused stream to initiate peer-connection
@@ -281,6 +304,13 @@
 			// let receiver know handshake is complete
 			signal({ handshake: true });
 		})
+		.then(function(done){
+			data_channel_ready.pipe(done);
+		})
+		.val(function(){
+			console.log("**** data channel open! ****");
+			sendMessage({ greeting: "Hello from caller" });
+		})
 		.or(function(err){
 			console.log("caller error",err.stack);
 		});
@@ -291,11 +321,6 @@
 	// the receiver of the RTC peer-to-peer connection request
 	function receiver() {
 		console.log("receiver");
-
-		data_channel.onopen = function() {
-			console.log("**** data channel open! ****");
-			data_channel.send("hello from receiver");
-		};
 
 		// Effing browser sniff hacks
 		// firefox requires a fake/unused stream to initiate peer-connection
@@ -327,6 +352,13 @@
 		.val(onSessionDescription)
 		.seq(function(){
 			return wait_for;
+		})
+		.then(function(done){
+			data_channel_ready.pipe(done);
+		})
+		.val(function(){
+			console.log("**** data channel open! ****");
+			sendMessage({ greeting: "Hello from receiver" });
 		})
 		.or(function(err){
 			console.log("receiver error",err.stack);
@@ -395,6 +427,7 @@
 		pc,
 		current_channel_id,
 		rtc_signal_exchange = ASQ(),
+		data_channel_ready = ASQ(),
 		ice_queue = [],
 
 		data_channel,
@@ -449,7 +482,9 @@
 		caller: caller,
 		receiver: receiver,
 		leave: leave,
-		onForceClosed: null
+		sendMessage: sendMessage,
+		onForceClosed: null,
+		onMessage: null
 	};
 
 })(window,window.unnamed);

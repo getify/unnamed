@@ -109,8 +109,8 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 		var cnv;
 
 		cnv = h5.canvas({
-			width: 250,
-			height: 205,
+			width: 125,
+			height: 103,
 			matchDimensions: true
 		});
 
@@ -118,12 +118,12 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 			dataURL: {
 				x: 0,
 				y: 0,
-				width: 250,
-				height: 205
+				width: 125,
+				height: 103
 			}
 		});
 
-		mypic = cnv.getImage({ dataURL: {} });
+		mypic = cnv.getImage({ dataURL: { type: "image/jpeg" } });
 		$myimg.attr({src:mypic});
 
 		// can we store the pic in sessionStorage?
@@ -248,7 +248,7 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 		// do we already have our own pic captured?
 		if (mypic) {
 			$myimg.attr({src:mypic}).show();
-			unnamed.game.start(user_id,mypic);
+			unnamed.game.start(user_id,first_name,mypic);
 		}
 		// otherwise, let's capture it!
 		else {

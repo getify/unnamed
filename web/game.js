@@ -8,11 +8,14 @@
 		offset_game_points = [];
 		$points = my_board = opponent_board = playing_surface_offset =
 			game_timestamp_differential = next_play_step =
-			current_game_id = null
+			current_game_id = opponentpic = opponentname = null
 		;
 		$playingsurface.empty();
 		game_status = start_point = next_point = 0;
 		record_plays = ASQ();
+
+		$them.find("img").attr({ src: "" });
+		$them.find("figcaption").text("");
 	}
 
 	function drawMyLines(x,y) {
@@ -161,6 +164,116 @@
 		}
 	}
 
+	function exchangePics() {
+		function chunkSend() {
+			var chunk, msg;
+
+			chunk = chunk_source.substr((sent_index * chunk_size),chunk_size);
+
+			msg = {
+				chunk: chunk,
+				index: sent_index
+			};
+
+			// no more to send?
+			if (((sent_index+1)*chunk_size) >= chunk_source.length) {
+				chunk_send_complete = true;
+				msg.last = true;
+				msg.name = myname.substr(0,20);
+			}
+
+			// NOTE: appears we have to throttle the data channel, or it chokes
+			setTimeout(function(){
+				console.log("sending chunk: " + sent_index);
+				unnamed.RTC.sendMessage(msg);
+
+				// timeout for non-received chunk ACK
+				if (!ack_waiting) {
+					ack_waiting = setTimeout(function(){
+						// retry chunk-send
+						ack_waiting = null;
+						chunk_send_complete = false;
+						chunkSend();
+					},1000);
+				}
+			},350);
+		}
+
+		function chunkReceive(msg) {
+			console.log("chunk received: " + msg.index);
+			opponentpic += msg.chunk;
+
+			console.log("sending ack: " + msg.index);
+			unnamed.RTC.sendMessage({ ack: msg.index });
+		}
+
+		function onMessage(msg) {
+			if (msg.chunk && msg.index > received_index) {
+				received_index++;
+				chunkReceive(msg);
+				if (msg.last) {
+					console.log("done receiving");
+					opponentname = msg.name;
+					receive_done();
+				}
+			}
+			else if (("ack" in msg) && msg.ack == sent_index) {
+				console.log("chunk acknowledged: " + msg.ack);
+				sent_index++;
+				clearTimeout(ack_waiting);
+				ack_waiting = null;
+				if (!chunk_send_complete) {
+					chunkSend();
+				}
+				else {
+					console.log("done sending");
+					send_done();
+				}
+			}
+			else {
+				console.log("**** unhandled RTC message ****",JSON.stringify(msg));
+			}
+		}
+
+		var steps = ASQ(), chunk_source = mypic,
+			chunk_size = 900, sent_index = 0, received_index = -1,
+			send_done, receive_done, chunk_send_complete = false,
+			ack_waiting
+		;
+
+		// prepare to receive pic from opponent
+		opponentpic = "";
+
+		// temporarily listen to RTC peer messages (for pic exchange!)
+		unnamed.RTC.onMessage = onMessage;
+
+		if (!is_moz) {
+			steps
+			.gate(
+				// send my pic
+				function(done){
+					send_done = done;
+					chunkSend();
+				},
+				// receive opponent pic
+				function(done){
+					receive_done = done;
+				}
+			)
+			.val(function(){
+				console.log("pic exchange complete!");
+
+				// we're done (for now) listening to RTC peer messages
+				unnamed.RTC.onMessage = null;
+
+				$them.find("img").attr({ src: opponentpic });
+				$them.find("figcaption").text(opponentname);
+			});
+		}
+
+		return steps;
+	}
+
 	function gameDataReceived(gamePoints,players,gameTimestamp) {
 		console.log("user (" + user_id + ") game data received");
 		var rtcCaller, steps;
@@ -180,6 +293,7 @@
 		}
 
 		steps
+		.seq(exchangePics)
 		.val(function(){
 			buildGame(gamePoints);
 		})
@@ -425,8 +539,9 @@
 		$areyouready.show();
 	}
 
-	function start(userID,myPic) {
+	function start(userID,firstName,myPic) {
 		user_id = userID;
+		myname = firstName;
 		mypic = myPic;
 
 		showReadyPrompt();
@@ -437,6 +552,7 @@
 		$game = $("#game");
 		$playingsurface = $("#playingsurface");
 		$leave_game = $("#leave_game");
+		$them = $("#game #them");
 
 		$areyouready.find("input[type='button']").click(yesImReady);
 		$leave_game.click(gameLeft);
@@ -444,9 +560,16 @@
 		unnamed.RTC.onForceClosed = gameRTCForceClosed;
 	}
 
-	var game_socket,
+	var 
+		// Effing browser sniff hacks
+		is_moz = ("MozAppearance" in document.documentElement.style),
+
+		game_socket,
 		user_id,
+		myname,
 		mypic,
+		opponentpic,
+		opponentname,
 		current_game_id,
 
 		game_status = 0,
@@ -463,6 +586,7 @@
 		$playingsurface,
 		$leave_game,
 		$points,
+		$them,
 
 		game_timestamp_differential,
 		playing_surface_offset,
