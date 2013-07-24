@@ -8,20 +8,35 @@
 			pc.close();
 		}
 
+		if (fake_moz_media && fake_moz_audio_stream) {
+			if (pc) {
+				try {
+					pc.removeStream(fake_moz_audio_stream);
+				}
+				catch(err) {}
+			}
+			fake_moz_media.abort();
+			fake_moz_media = fake_moz_audio_stream = null;
+		}
 		if (rtc_signal_exchange) {
 			rtc_signal_exchange.abort();
 		}
 		rtc_signal_exchange = ASQ();
-		if (data_channel_ready) {
-			data_channel_ready.abort();
+		if (wait_for_data_channel) {
+			wait_for_data_channel.abort();
 		}
-		data_channel_ready = ASQ();
+		wait_for_data_channel = ASQ();
 		resetWaitFor();
 		resetMessageQueue();
 		if (data_channel) {
-			data_channel.onopen = data_channel.onerror = data_channel.onmessage = null;
+			data_channel.onopen = data_channel.onerror =
+				data_channel.onmessage = null
+			;
 		}
-		data_channel = current_channel_id = pc = wait_for_complete = null;
+		data_channel = data_channel_pump_throttle = current_channel_id =
+			pc = wait_for_complete = fake_moz_audio_stream = null
+		;
+		data_channel_stream = [];
 	}
 
 	function resetMessageQueue(){
@@ -85,10 +100,9 @@
 
 	function signal(message) {
 		if (rtcsignals_socket) {
-			console.log("from (" + from_id + ") sending signal",JSON.stringify(arguments));
-
 			message.from_id = from_id;
 			message.channel_id = current_channel_id;
+			console.log("from (" + from_id + ") sending signal",JSON.stringify(message));
 			rtcsignals_socket.emit("message",message);
 		}
 	}
@@ -175,6 +189,7 @@
 		console.log("local description created",description);
 
 		pc.setLocalDescription(description);
+
 		signal({
 			sdp: description
 		});
@@ -185,6 +200,8 @@
 	}
 
 	function createDataChannel() {
+		var data_channel_opened = false;
+
 		console.log("creating data channel");
 		data_channel = pc.createDataChannel(
 			"game_" + current_channel_id,
@@ -198,30 +215,62 @@
 
 		data_channel.onmessage = onDataChannelMessage;
 		data_channel.onerror = onDataChannelError;
+		data_channel.onopen = function() { data_channel_opened = true; };
+
+		wait_for_data_channel
+		.then(function(done){
+			if (data_channel_opened) done();
+			else data_channel.onopen = done;
+		});
 	}
 
 	function sendMessage(msg) {
 		if (data_channel) {
+			// let's only allow sending/receving JSON-parseable string data!
 			if (typeof msg !== "string") msg = JSON.stringify(msg);
+
+			data_channel_stream.push(msg);
+			pumpDataChannel();
+		}
+	}
+
+	// pump the stream with the next DataChannel message to send
+	function pumpDataChannel() {
+		var msg;
+
+		if (!data_channel_pump_throttle &&
+			data_channel_stream.length > 0 &&
+			data_channel
+		) {
+			msg = data_channel_stream.shift();
+
 			try {
+				console.log("sending data-channel message: " + msg);
 				data_channel.send(msg);
+
+				// throttle the data channel pumping
+				data_channel_pump_throttle = setTimeout(function __throttle__(){
+					data_channel_pump_throttle = null;
+					pumpDataChannel();
+				},50);
 			}
 			catch (err) {
-				console.log(err);
 				console.log(msg);
-				console.log(typeof msg);
-				console.log(msg.length);
-				throw new Error("STOP IT!");
+				onDataChannelError(err);
+				data_channel_stream.length = 0;
 			}
 		}
 	}
 
+	// received DataChannel message
 	function onDataChannelMessage(evt) {
 		if (RTC.onMessage) {
 			// let's only allow sending/receving JSON-parseable string data!
 			try {
+				// notify the handler
 				RTC.onMessage(JSON.parse(evt.data));
-			} catch (err) {}
+			}
+			catch (err) {}
 		}
 	}
 
@@ -230,12 +279,13 @@
 	function getFakeMozStream() {
 		return ASQ(function(done){
 			console.log("creating fake streams for firefox");
-			h5
+			fake_moz_media = h5
 			.userMedia({
 				audio: true,
 				fake: true
 			})
 			.stream(function(src){
+				fake_moz_audio_stream = src;
 				try {
 					pc.addStream(src);
 					console.log("fake streams created");
@@ -248,6 +298,7 @@
 		});
 	}
 
+	// join a RTC signaling channel
 	function join(channelID,fromID) {
 		current_channel_id = channelID;
 		from_id = fromID;
@@ -264,13 +315,10 @@
 
 		try {
 			createDataChannel();
-			data_channel_ready.then(function(done){
-				data_channel.onopen = done;
-			});
 			message_queue_ready();
 		}
 		catch (err) {
-			console.log("createDataChannel",err.stack);
+			console.log("createDataChannel Error",err.stack);
 			rtc_signal_exchange.abort();
 		}
 	}
@@ -304,12 +352,11 @@
 			// let receiver know handshake is complete
 			signal({ handshake: true });
 		})
-		.then(function(done){
-			data_channel_ready.pipe(done);
+		.seq(function(){
+			return wait_for_data_channel;
 		})
 		.val(function(){
 			console.log("**** data channel open! ****");
-			sendMessage({ greeting: "Hello from caller" });
 		})
 		.or(function(err){
 			console.log("caller error",err.stack);
@@ -353,12 +400,11 @@
 		.seq(function(){
 			return wait_for;
 		})
-		.then(function(done){
-			data_channel_ready.pipe(done);
+		.seq(function(){
+			return wait_for_data_channel;
 		})
 		.val(function(){
 			console.log("**** data channel open! ****");
-			sendMessage({ greeting: "Hello from receiver" });
 		})
 		.or(function(err){
 			console.log("receiver error",err.stack);
@@ -367,6 +413,7 @@
 		return rtc_signal_exchange;
 	}
 
+	// leave the RTC signaling channel
 	function leave(sendClose) {
 		console.log("rtc leave:" + sendClose);
 		if (rtcsignals_socket) {
@@ -425,12 +472,16 @@
 
 		rtcsignals_socket,
 		pc,
+		fake_moz_media,
+		fake_moz_audio_stream,
 		current_channel_id,
 		rtc_signal_exchange = ASQ(),
-		data_channel_ready = ASQ(),
+		wait_for_data_channel = ASQ(),
 		ice_queue = [],
 
 		data_channel,
+		data_channel_stream = [],
+		data_channel_pump_throttle,
 
 		wait_for,
 		wait_for_complete,

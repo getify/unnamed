@@ -182,21 +182,24 @@
 				msg.name = myname.substr(0,20);
 			}
 
-			// NOTE: appears we have to throttle the data channel, or it chokes
-			setTimeout(function(){
-				console.log("sending chunk: " + sent_index);
-				unnamed.RTC.sendMessage(msg);
+			console.log("sending chunk: " + sent_index);
+			unnamed.RTC.sendMessage(msg);
 
-				// timeout for non-received chunk ACK
-				if (!ack_waiting) {
-					ack_waiting = setTimeout(function(){
+			// do we need a timeout for retry if no ACK received?
+			if (!ack_waiting) {
+				ack_waiting = setTimeout(function(){
+					if (retry_count < 3) {
 						// retry chunk-send
+						retry_count++;
 						ack_waiting = null;
 						chunk_send_complete = false;
 						chunkSend();
-					},1000);
-				}
-			},350);
+					}
+					else {
+						send_done.fail("aborting pic-exchange, send-chunk failed: " + sent_index);
+					}
+				},1000);
+			}
 		}
 
 		function chunkReceive(msg) {
@@ -222,6 +225,7 @@
 				sent_index++;
 				clearTimeout(ack_waiting);
 				ack_waiting = null;
+				retry_count = 0;
 				if (!chunk_send_complete) {
 					chunkSend();
 				}
@@ -238,7 +242,7 @@
 		var steps = ASQ(), chunk_source = mypic,
 			chunk_size = 900, sent_index = 0, received_index = -1,
 			send_done, receive_done, chunk_send_complete = false,
-			ack_waiting
+			ack_waiting, retry_count = 0
 		;
 
 		// prepare to receive pic from opponent
@@ -268,7 +272,14 @@
 
 				$them.find("img").attr({ src: opponentpic });
 				$them.find("figcaption").text(opponentname);
+			})
+			.or(function(){
+				// we're done (for now) listening to RTC peer messages
+				unnamed.RTC.onMessage = null;
 			});
+		}
+		else {
+			console.log("Skipping pic exchange since data-channel isn't working (yet) in this browser.");
 		}
 
 		return steps;

@@ -124,7 +124,7 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 		});
 
 		mypic = cnv.getImage({ dataURL: { type: "image/jpeg" } });
-		$myimg.attr({src:mypic});
+		$myimg.attr({ src: mypic });
 
 		// can we store the pic in sessionStorage?
 		if (session_storage_available) {
@@ -136,7 +136,7 @@ JSON.clone||(JSON.clone=function(a){return JSON.parse(JSON.stringify(a))});
 		cancelVideoCapture();
 
 		if (leaderboard_socket) {
-			unnamed.game.start(user_id,mypic);
+			unnamed.game.start(user_id,first_name,mypic);
 		}
 	}
 
