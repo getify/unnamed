@@ -8,16 +8,6 @@
 			pc.close();
 		}
 
-		if (fake_moz_media && fake_moz_audio_stream) {
-			if (pc) {
-				try {
-					pc.removeStream(fake_moz_audio_stream);
-				}
-				catch(err) {}
-			}
-			fake_moz_media.abort();
-			fake_moz_media = fake_moz_audio_stream = null;
-		}
 		if (rtc_signal_exchange) {
 			rtc_signal_exchange.abort();
 		}
@@ -33,8 +23,11 @@
 				data_channel.onmessage = null
 			;
 		}
+		if (pc) {
+			pc.ondatachannel = null;
+		}
 		data_channel = data_channel_pump_throttle = current_channel_id =
-			pc = wait_for_complete = fake_moz_audio_stream = null
+			pc = wait_for_complete = null
 		;
 		data_channel_stream = [];
 	}
@@ -159,33 +152,25 @@
 	}
 
 	function onIceCandidate(evt) {
-		signal({
-			candidate: evt.candidate
-		});
-	}
-
-	// From: https://googledrive.com/host/0B6GWd_dUUTT8RzVSRVU2MlIxcm8/RTCPeerConnection-v1.5.js
-	function randomChars(length) {
-		var i, chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split(""), ret = "";
-		for (i=0; i<length; i++) {
-			ret += chars[Math.round(Math.random() * 100) % chars.length];
+		if (evt.candidate && evt.candidate.candidate) {
+			console.log("onIceCandidate: " + JSON.stringify(evt.candidate));
+			signal({
+				candidate: evt.candidate
+			});
 		}
-		return ret;
 	}
 
-	// From: https://googledrive.com/host/0B6GWd_dUUTT8RzVSRVU2MlIxcm8/RTCPeerConnection-v1.5.js
-	function getInteropSDP(sdp) {
-		var inline = randomChars(40) + "\r\n";
+	// temporay hacks: patch various SDP issues
+	function patchSDP(description) {
+		// patch data channel index
+		// from: https://groups.google.com/d/msg/mozilla.dev.media/Yx9ZtFPqV6w/fYpBw3TOXX0J
+		description.sdp = description.sdp.replace(/webrtc-datachannel 65536/g,"webrtc-datachannel 2048");
 
-		sdp = !~sdp.indexOf("a=crypto") ?
-			sdp.replace(/c=IN/g,"a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:" + inline + "c=IN") :
-			sdp
-		;
-
-		return sdp;
+		return description;
 	}
 
 	function onSessionDescription(description) {
+		description = patchSDP(description);
 		console.log("local description created",description);
 
 		pc.setLocalDescription(description);
@@ -195,32 +180,44 @@
 		});
 	}
 
-	function onDataChannelError(err) {
-		console.log("onDataChannelError",err.stack);
-	}
-
-	function createDataChannel() {
-		var data_channel_opened = false;
-
-		console.log("creating data channel");
-		data_channel = pc.createDataChannel(
-			"game_" + current_channel_id,
-			data_channel_opts
-		);
-
-		// Effing browser sniff hacks
-		if (is_moz) {
-			data_channel.binaryType = "blob";
-		}
-
-		data_channel.onmessage = onDataChannelMessage;
-		data_channel.onerror = onDataChannelError;
-		data_channel.onopen = function() { data_channel_opened = true; };
-
-		wait_for_data_channel
+	function createDataChannel(callerSide) {
+		return ASQ()
 		.then(function(done){
-			if (data_channel_opened) done();
-			else data_channel.onopen = done;
+
+			wait_for_data_channel
+			.then(function(dcDone){
+				// on the caller side, create the data channel
+				if (callerSide) {
+					console.log("creating data channel");
+					data_channel = pc.createDataChannel(
+						"game_" + current_channel_id,
+						data_channel_opts
+					);
+
+					data_channel.onmessage = onDataChannelMessage;
+					data_channel.onerror = done.fail;
+					data_channel.onopen = function(){
+						console.log("data channel onopen");
+						dcDone(); // data-channel open!
+					};
+
+					done(); // data-channel created
+				}
+				// on the receiver side, receive the data channel
+				else {
+					console.log("listening for data channel");
+					pc.ondatachannel = function(evt) {
+						console.log("received data channel");
+						data_channel = evt.channel;
+						data_channel.onmessage = onDataChannelMessage;
+
+						dcDone(); // data-channel open!
+					};
+
+					done(); // data-channel created
+				}
+			});
+
 		});
 	}
 
@@ -256,7 +253,6 @@
 			}
 			catch (err) {
 				console.log(msg);
-				onDataChannelError(err);
 				data_channel_stream.length = 0;
 			}
 		}
@@ -274,32 +270,8 @@
 		}
 	}
 
-	// Effing browser sniff hacks
-	// firefox requires a fake/unused stream to initiate peer-connection
-	function getFakeMozStream() {
-		return ASQ(function(done){
-			console.log("creating fake streams for firefox");
-			fake_moz_media = h5
-			.userMedia({
-				audio: true,
-				fake: true
-			})
-			.stream(function(src){
-				fake_moz_audio_stream = src;
-				try {
-					pc.addStream(src);
-					console.log("fake streams created");
-					done();
-				}
-				catch (err) {
-					done.fail("fakeMozStream failed",err);
-				}
-			});
-		});
-	}
-
 	// join a RTC signaling channel
-	function join(channelID,fromID) {
+	function join(channelID,fromID,callerSide) {
 		current_channel_id = channelID;
 		from_id = fromID;
 
@@ -314,8 +286,11 @@
 		pc.onicecandidate = onIceCandidate;
 
 		try {
-			createDataChannel();
-			message_queue_ready();
+			rtc_signal_exchange
+			.seq(function(){
+				return createDataChannel(callerSide);
+			})
+			.val(message_queue_ready);
 		}
 		catch (err) {
 			console.log("createDataChannel Error",err.stack);
@@ -327,36 +302,30 @@
 	function caller() {
 		console.log("caller");
 
-		// Effing browser sniff hacks
-		// firefox requires a fake/unused stream to initiate peer-connection
-		if (is_moz) {
-			rtc_signal_exchange.seq(getFakeMozStream);
-		}
-
 		rtc_signal_exchange
 		.then(function(done){
 			console.log("creating offer");
 			console.log(media_constraints);
 			pc.createOffer(function(desc){
 				console.log("offer created");
-				desc.sdp = getInteropSDP(desc.sdp);
 				done.apply(done,arguments);
 			},done.fail,media_constraints);
 		})
 		// caller's local description created, and sent to receiver
 		.val(onSessionDescription)
 		.seq(function(){
+			console.log("waiting on wait_for");
 			return wait_for;
 		})
-		.val(function(){
-			// let receiver know handshake is complete
-			signal({ handshake: true });
-		})
 		.seq(function(){
+			console.log("waiting on wait_for_data_channel");
 			return wait_for_data_channel;
 		})
 		.val(function(){
 			console.log("**** data channel open! ****");
+
+			// let receiver know handshake is complete
+			signal({ handshake: true });
 		})
 		.or(function(err){
 			console.log("caller error",err.stack);
@@ -368,12 +337,6 @@
 	// the receiver of the RTC peer-to-peer connection request
 	function receiver() {
 		console.log("receiver");
-
-		// Effing browser sniff hacks
-		// firefox requires a fake/unused stream to initiate peer-connection
-		if (is_moz) {
-			rtc_signal_exchange.seq(getFakeMozStream);
-		}
 
 		rtc_signal_exchange
 		.seq(function(){
@@ -392,15 +355,16 @@
 
 			pc.createAnswer(function(desc){
 				console.log("answer created");
-				desc.sdp = getInteropSDP(desc.sdp);
 				done.apply(done,arguments);
 			},done.fail,media_constraints);
 		})
 		.val(onSessionDescription)
 		.seq(function(){
+			console.log("waiting on wait_for");
 			return wait_for;
 		})
 		.seq(function(){
+			console.log("waiting on wait_for_data_channel");
 			return wait_for_data_channel;
 		})
 		.val(function(){
@@ -472,8 +436,6 @@
 
 		rtcsignals_socket,
 		pc,
-		fake_moz_media,
-		fake_moz_audio_stream,
 		current_channel_id,
 		rtc_signal_exchange = ASQ(),
 		wait_for_data_channel = ASQ(),
@@ -491,18 +453,15 @@
 			mandatory: {}
 		},
 
-		peer_connection_options = (
-			!is_moz ?
-			{
-				optional: [{ RtpDataChannels: true }]
-			} :
-			undefined
-		),
+		peer_connection_options = {
+			optional: [
+				{ DtlsSrtpKeyAgreement: true } // FF/Chrome interop? https://hacks.mozilla.org/category/webrtc/as/complete/
+			]
+		},
 
 		iceServers = [
-			{
-				url: !is_moz ? "stun:stun.l.google.com:19302" : "stun:23.21.150.121"
-			}
+			{ url: "stun:23.21.150.121" },
+			{ url: "stun:stun.l.google.com:19302" }
 		],
 
 		data_channel_opts = {},
@@ -514,18 +473,19 @@
 	resetWaitFor();
 	resetMessageQueue();
 
+	// reliable data channels!!
+	data_channel_opts.reliable = true;
+	data_channel_opts.ordered = true;
+
 	// Effing browser sniff hacks
-	if (is_moz) {
+/*	if (is_moz) {
 		media_constraints.mandatory.OfferToReceiveAudio = true;
 		media_constraints.mandatory.OfferToReceiveVideo = true;
 	}
 	else {
 		media_constraints.mandatory.OfferToReceiveAudio = false;
 		media_constraints.mandatory.OfferToReceiveVideo = false;
-
-		// no one really supports "reliable" yet :(
-		data_channel_opts.reliable = false;
-	}
+	}*/
 
 	RTC = window.unnamed.RTC = {
 		init: init,

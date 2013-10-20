@@ -148,12 +148,12 @@
 		});
 	}
 
-	function playerDataReceived(token,gameID) {
+	function playerDataReceived(token,gameID,callerSide) {
 		console.log("user (" + user_id + ") player data received");
 		if (gameID) {
 			console.log("user (" + user_id + ") game ID: " + gameID);
 			current_game_id = Number(gameID);
-			unnamed.RTC.join(current_game_id,user_id);
+			unnamed.RTC.join(current_game_id,user_id,callerSide);
 		}
 
 		if (next_play_step) {
@@ -240,7 +240,7 @@
 		}
 
 		var steps = ASQ(), chunk_source = mypic,
-			chunk_size = 900, sent_index = 0, received_index = -1,
+			chunk_size = 1E9, sent_index = 0, received_index = -1,
 			send_done, receive_done, chunk_send_complete = false,
 			ack_waiting, retry_count = 0
 		;
@@ -251,7 +251,7 @@
 		// temporarily listen to RTC peer messages (for pic exchange!)
 		unnamed.RTC.onMessage = onMessage;
 
-		if (!is_moz) {
+		if (true/*!is_moz*/) {
 			steps
 			.gate(
 				// send my pic
@@ -357,7 +357,7 @@
 			});
 
 			cnv.pushState();
-			
+
 			// draw the dot
 			cnv
 			.startPath(x,y)
@@ -522,27 +522,25 @@
 		record_plays.then(function(done){
 			console.log("user (" + user_id + ") defining next_play_step");
 			next_play_step = done;
-		});
 
-		// TODO: temporary hack
-		current_game_id = +($("#join_game_id").val());
-		$("#join_game_id").val("");
+			// TODO: temporary hack
+			current_game_id = +($("#join_game_id").val());
+			$("#join_game_id").val("");
 
-		game_socket = io.connect(global.unnamed.SERVER + "/game",global.unnamed.SOCKET_IO_CONNECT_OPTS);
-		game_socket.once("connect_failed",socketConnectFailed);
-		game_socket.once("disconnect",socketDisconnect);
-		game_socket.once("invalid_game",invalidGame);
-		game_socket.on("player_data",playerDataReceived);
-		game_socket.on("opponent_play",drawOpponentLines);
-		game_socket.on("game_data",gameDataReceived);
-		game_socket.on("game_ended",socketGameEnded);
+			game_socket = io.connect(global.unnamed.SERVER + "/game",global.unnamed.SOCKET_IO_CONNECT_OPTS);
+			game_socket.once("connect_failed",socketConnectFailed);
+			game_socket.once("disconnect",socketDisconnect);
+			game_socket.once("invalid_game",invalidGame);
+			game_socket.on("player_data",playerDataReceived);
+			game_socket.on("opponent_play",drawOpponentLines);
+			game_socket.on("game_data",gameDataReceived);
+			game_socket.on("game_ended",socketGameEnded);
 
-		setTimeout(function(){
 			console.log("user (" + user_id + ") joining game: " + current_game_id);
 			game_socket.emit("user",user_id,current_game_id);
-		},0);
 
-		$game.show();
+			$game.show();
+		});
 	}
 
 	function showReadyPrompt() {
@@ -571,7 +569,7 @@
 		unnamed.RTC.onForceClosed = gameRTCForceClosed;
 	}
 
-	var 
+	var
 		// Effing browser sniff hacks
 		is_moz = ("MozAppearance" in document.documentElement.style),
 

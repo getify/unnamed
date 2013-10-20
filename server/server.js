@@ -37,12 +37,6 @@ function handleHTTP(req, res) {
 			});
 			res.end();
 		}
-		else if (req.url.match(/^\/something\b/)) {
-			req.addListener("end",function(){
-				something(req,res);
-			});
-			req.resume();
-		}
 		else {
 			res.writeHead(403,CORS_GET_HEADERS);
 			res.end();
@@ -115,13 +109,6 @@ function login(reqData,oreq,ores) {
 		email: users[user_id].email,
 		score: users[user_id].score
 	}));
-}
-
-function something(oreq,ores) {
-	ores.writeHead(200,{
-		"Content-type": "text/plain"
-	});
-	ores.end("Hello World");
 }
 
 

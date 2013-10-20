@@ -78,7 +78,7 @@ function connection(socket) {
 
 	function user(userID,gameID) {
 		console.log("user (" + userID + ") joining game: " + gameID);
-		var token;
+		var token, caller_side;
 
 		if (user_list[userID] && user_list[userID].connected) {
 			user_id = userID;
@@ -100,6 +100,8 @@ function connection(socket) {
 				game_sessions[game_id].plays[user_id] =
 					game_sessions[game_id].plays[user_id] || {}
 				;
+
+				caller_side = false;
 			}
 			else {
 				game_id = generateID(game_sessions);
@@ -113,6 +115,8 @@ function connection(socket) {
 				user_list[user_id].game = game_id;
 				game_sessions[game_id].plays[user_id] = {};
 				socket.join(game_id);
+
+				caller_side = true;
 			}
 
 			token = generateID(game_sessions[game_id].plays[user_id]);
@@ -121,7 +125,7 @@ function connection(socket) {
 				timestamp: null
 			};
 
-			socket.emit("player_data",token,game_id);
+			socket.emit("player_data",token,game_id,caller_side);
 
 			// are both users joined to the same game now?
 			if (game_sessions[game_id].users.length === 2) {
